@@ -8,15 +8,18 @@ import {
   Timestamp,
 } from "firebase/firestore";
 
-import { db } from "@/lib/firebase";
+import { signInAnonymously } from "firebase/auth";
+
+import {
+  db,
+  auth,
+} from "@/lib/firebase";
 
 import dynamic from "next/dynamic";
-
 
 const Map = dynamic(() => import("./Map"), {
   ssr: false,
 });
-
 
 /* ========================================
    運行記録
@@ -32,7 +35,6 @@ type OperationRecord = {
   time: Timestamp;
 };
 
-
 /* ========================================
    乗車 / 降車
    ======================================== */
@@ -41,7 +43,6 @@ type DisplayMode =
   | "boarding"
   | "alighting";
 
-
 /* ========================================
    日ごと / 月ごと
    ======================================== */
@@ -49,7 +50,6 @@ type DisplayMode =
 type PeriodMode =
   | "day"
   | "month";
-
 
 /* ========================================
    ルート
@@ -60,7 +60,6 @@ type RouteFilter =
   | "ORANGE"
   | "BLUE"
   | "FREE";
-
 
 /* ========================================
    協賛施設
@@ -73,13 +72,11 @@ type SponsorFacility = {
   longitude: number;
 };
 
-
 /* ========================================
    協賛施設一覧
    ======================================== */
 
 const sponsorFacilities: SponsorFacility[] = [
-
   {
     id: "crossport",
     name: "幕張ベイパーク クロスポート",
@@ -93,20 +90,15 @@ const sponsorFacilities: SponsorFacility[] = [
     latitude: 35.6398,
     longitude: 140.0465,
   },
-
 ];
 
-
 export default function Home() {
-
-
   /* ========================================
      表示期間
      ======================================== */
 
   const [periodMode, setPeriodMode] =
     useState<PeriodMode>("day");
-
 
   /* ========================================
      日付
@@ -115,14 +107,12 @@ export default function Home() {
   const [selectedDate, setSelectedDate] =
     useState("2026-08-22");
 
-
   /* ========================================
      月
      ======================================== */
 
   const [selectedMonth, setSelectedMonth] =
     useState("2026-08");
-
 
   /* ========================================
      Firestoreの運行記録
@@ -131,14 +121,12 @@ export default function Home() {
   const [records, setRecords] =
     useState<OperationRecord[]>([]);
 
-
   /* ========================================
      乗車 / 降車
      ======================================== */
 
   const [displayMode, setDisplayMode] =
     useState<DisplayMode>("boarding");
-
 
   /* ========================================
      ルート
@@ -147,16 +135,13 @@ export default function Home() {
   const [selectedRoute, setSelectedRoute] =
     useState<RouteFilter>("ALL");
 
-
   /* ========================================
      協賛施設
-
      "" = 選択なし
      ======================================== */
 
   const [selectedFacility, setSelectedFacility] =
     useState("");
-
 
   /* ========================================
      時間帯フィルター
@@ -165,22 +150,17 @@ export default function Home() {
   const [useTimeFilter, setUseTimeFilter] =
     useState(false);
 
-
   const [startTime, setStartTime] =
     useState("00:00");
-
 
   const [endTime, setEndTime] =
     useState("23:59");
 
-
   const [appliedStartTime, setAppliedStartTime] =
     useState("00:00");
 
-
   const [appliedEndTime, setAppliedEndTime] =
     useState("23:59");
-
 
   /* ========================================
      読み込み
@@ -189,7 +169,6 @@ export default function Home() {
   const [loading, setLoading] =
     useState(true);
 
-
   /* ========================================
      エラー
      ======================================== */
@@ -197,34 +176,39 @@ export default function Home() {
   const [error, setError] =
     useState("");
 
-
   /* ========================================
      Firestoreからデータ取得
      ======================================== */
 
   useEffect(() => {
-
     const fetchRecords = async () => {
-
       setLoading(true);
-
       setError("");
-
       setRecords([]);
 
-
       try {
+        /* ==================================
+           Firebase Authentication
+           ==================================
+
+           Firestore Rulesで
+           request.auth != null
+           を条件にしているため、
+           Firestoreを読む前に匿名認証する。
+        */
+
+        if (!auth.currentUser) {
+          await signInAnonymously(auth);
+        }
 
         const fetchedRecords:
           OperationRecord[] = [];
-
 
         /* ==================================
            日ごとの表示
            ================================== */
 
         if (periodMode === "day") {
-
           const snapshot =
             await getDocs(
               collection(
@@ -233,13 +217,10 @@ export default function Home() {
               )
             );
 
-
           snapshot.forEach(
             (document) => {
-
               const record =
                 document.data();
-
 
               if (
                 record.latitude !== undefined &&
@@ -249,9 +230,7 @@ export default function Home() {
                 record.routeType !== undefined &&
                 record.time !== undefined
               ) {
-
                 fetchedRecords.push({
-
                   id:
                     `${selectedDate}_${document.id}`,
 
@@ -272,34 +251,25 @@ export default function Home() {
 
                   time:
                     record.time,
-
                 });
-
               }
-
             }
           );
-
         }
-
 
         /* ==================================
            月ごとの表示
            ================================== */
 
         else {
-
           const [year, month] =
             selectedMonth.split("-");
-
 
           const yearNumber =
             Number(year);
 
-
           const monthNumber =
             Number(month);
-
 
           /*
            * その月の日数
@@ -312,26 +282,21 @@ export default function Home() {
               0
             ).getDate();
 
-
           for (
             let day = 1;
             day <= daysInMonth;
             day++
           ) {
-
             const dayString =
               String(day).padStart(
                 2,
                 "0"
               );
 
-
             const collectionName =
               `${year}-${month}-${dayString}`;
 
-
             try {
-
               const snapshot =
                 await getDocs(
                   collection(
@@ -340,13 +305,10 @@ export default function Home() {
                   )
                 );
 
-
               snapshot.forEach(
                 (document) => {
-
                   const record =
                     document.data();
-
 
                   if (
                     record.latitude !== undefined &&
@@ -356,9 +318,7 @@ export default function Home() {
                     record.routeType !== undefined &&
                     record.time !== undefined
                   ) {
-
                     fetchedRecords.push({
-
                       id:
                         `${collectionName}_${document.id}`,
 
@@ -379,76 +339,52 @@ export default function Home() {
 
                       time:
                         record.time,
-
                     });
-
                   }
-
                 }
               );
-
-
             } catch {
-
               console.log(
                 `${collectionName} は取得できません`
               );
-
             }
-
           }
-
         }
-
 
         console.log(
           "取得した運行記録:",
           fetchedRecords
         );
 
-
         setRecords(
           fetchedRecords
         );
-
-
       } catch (err) {
-
         console.error(
           "Firestoreエラー:",
           err
         );
 
-
         setError(
           "Firestoreからデータを取得できませんでした。"
         );
-
-
       } finally {
-
         setLoading(false);
-
       }
-
     };
 
-
     fetchRecords();
-
   }, [
     periodMode,
     selectedDate,
     selectedMonth,
   ]);
 
-
   /* ========================================
      ルート一覧
      ======================================== */
 
   const routes = [
-
     {
       value: "ALL" as RouteFilter,
       label: "すべて",
@@ -468,9 +404,7 @@ export default function Home() {
       value: "FREE" as RouteFilter,
       label: "Free",
     },
-
   ];
-
 
   /* ========================================
      乗車 / 降車で絞り込み
@@ -479,26 +413,20 @@ export default function Home() {
   const modeFilteredRecords =
     records.filter(
       (record) => {
-
         if (
           displayMode ===
           "boarding"
         ) {
-
           return (
             record.passengerChange > 0
           );
-
         }
-
 
         return (
           record.passengerChange < 0
         );
-
       }
     );
-
 
   /* ========================================
      ルートで絞り込み
@@ -507,7 +435,6 @@ export default function Home() {
   const routeFilteredRecords =
     modeFilteredRecords.filter(
       (record) => {
-
         const routeType =
           String(
             record.routeType
@@ -515,18 +442,14 @@ export default function Home() {
             .trim()
             .toUpperCase();
 
-
         /* すべて */
 
         if (
           selectedRoute ===
           "ALL"
         ) {
-
           return true;
-
         }
-
 
         /* オレンジ */
 
@@ -534,14 +457,11 @@ export default function Home() {
           selectedRoute ===
           "ORANGE"
         ) {
-
           return (
             routeType ===
             "ORANGE"
           );
-
         }
-
 
         /* ブルー */
 
@@ -549,14 +469,11 @@ export default function Home() {
           selectedRoute ===
           "BLUE"
         ) {
-
           return (
             routeType ===
             "BLUE"
           );
-
         }
-
 
         /* Free */
 
@@ -564,20 +481,15 @@ export default function Home() {
           selectedRoute ===
           "FREE"
         ) {
-
           return (
             routeType ===
             "FREE"
           );
-
         }
 
-
         return false;
-
       }
     );
-
 
   /* ========================================
      時間帯で絞り込み
@@ -586,17 +498,13 @@ export default function Home() {
   const filteredRecords =
     routeFilteredRecords.filter(
       (record) => {
-
         /*
          * 時間フィルターOFF
          */
 
         if (!useTimeFilter) {
-
           return true;
-
         }
-
 
         /*
          * Timestamp → Date
@@ -605,7 +513,6 @@ export default function Home() {
         const date =
           record.time.toDate();
 
-
         /*
          * 記録時刻
          */
@@ -613,7 +520,6 @@ export default function Home() {
         const recordMinutes =
           date.getHours() * 60 +
           date.getMinutes();
-
 
         /*
          * 開始時刻
@@ -627,7 +533,6 @@ export default function Home() {
             .split(":")
             .map(Number);
 
-
         /*
          * 終了時刻
          */
@@ -640,16 +545,13 @@ export default function Home() {
             .split(":")
             .map(Number);
 
-
         const startMinutes =
           startHour * 60 +
           startMinute;
 
-
         const endMinutes =
           endHour * 60 +
           endMinute;
-
 
         /*
          * 通常の時間帯
@@ -659,16 +561,13 @@ export default function Home() {
           startMinutes <=
           endMinutes
         ) {
-
           return (
             recordMinutes >=
               startMinutes &&
             recordMinutes <=
               endMinutes
           );
-
         }
-
 
         /*
          * 日付をまたぐ場合
@@ -680,10 +579,8 @@ export default function Home() {
           recordMinutes <=
             endMinutes
         );
-
       }
     );
-
 
   /* ========================================
      Mapに渡すデータ
@@ -692,7 +589,6 @@ export default function Home() {
   const mapRecords =
     filteredRecords.map(
       (record) => ({
-
         ...record,
 
         time:
@@ -701,10 +597,8 @@ export default function Home() {
             .toLocaleString(
               "ja-JP"
             ),
-
       })
     );
-
 
   /* ========================================
      選択されている協賛施設
@@ -717,7 +611,6 @@ export default function Home() {
         selectedFacility
     ) ?? null;
 
-
   /* ========================================
      選択されているルート名
      ======================================== */
@@ -729,95 +622,72 @@ export default function Home() {
         selectedRoute
     )?.label ?? "すべて";
 
-
   /* ========================================
      時間フィルター適用
      ======================================== */
 
   const applyTimeFilter = () => {
-
     setAppliedStartTime(
       startTime
     );
-
 
     setAppliedEndTime(
       endTime
     );
 
-
     setUseTimeFilter(
       true
     );
-
   };
-
 
   /* ========================================
      時間フィルター解除
      ======================================== */
 
   const clearTimeFilter = () => {
-
     setUseTimeFilter(
       false
     );
-
 
     setStartTime(
       "00:00"
     );
 
-
     setEndTime(
       "23:59"
     );
-
 
     setAppliedStartTime(
       "00:00"
     );
 
-
     setAppliedEndTime(
       "23:59"
     );
-
   };
-
 
   /* ========================================
      読み込み画面
      ======================================== */
 
   if (loading) {
-
     return (
-
       <div className="loading-screen">
-
         <p>
           Firestoreから
           運行記録を読み込んでいます...
         </p>
-
       </div>
-
     );
-
   }
-
 
   /* ========================================
      エラー画面
      ======================================== */
 
   if (error) {
-
     return (
-
       <div className="loading-screen">
-
         <h1>
           運行記録表示システム
         </h1>
@@ -825,38 +695,29 @@ export default function Home() {
         <p>
           {error}
         </p>
-
       </div>
-
     );
-
   }
-
 
   /* ========================================
      メイン画面
      ======================================== */
 
   return (
-
     <main className="map-screen">
-
 
       {/* ==================================
           マップ
           ================================== */}
 
       <div className="map-container">
-
         <Map
           records={mapRecords}
           selectedRoute={selectedRoute}
           periodMode={periodMode}
           selectedFacility={selectedFacilityData}
         />
-
       </div>
-
 
       {/* ==================================
           操作パネル
@@ -864,30 +725,24 @@ export default function Home() {
 
       <div className="control-panel">
 
-
         {/* ==================================
             タイトル
             ================================== */}
 
         <div className="panel-title">
-
           <h1>
             運行記録表示システム
           </h1>
-
         </div>
-
 
         {/* ==================================
             日ごと / 月ごと
             ================================== */}
 
         <div className="period-section">
-
           <label>
             表示期間
           </label>
-
 
           <div className="period-buttons">
 
@@ -897,7 +752,6 @@ export default function Home() {
                   ? "period-button active"
                   : "period-button"
               }
-
               onClick={() =>
                 setPeriodMode("day")
               }
@@ -905,14 +759,12 @@ export default function Home() {
               日ごと
             </button>
 
-
             <button
               className={
                 periodMode === "month"
                   ? "period-button active"
                   : "period-button"
               }
-
               onClick={() =>
                 setPeriodMode("month")
               }
@@ -921,32 +773,25 @@ export default function Home() {
             </button>
 
           </div>
-
         </div>
-
 
         {/* ==================================
             日付 / 月
             ================================== */}
 
         {periodMode === "day" ? (
-
           <div className="date-section">
 
             <label htmlFor="date">
               運行日
             </label>
 
-
             <input
               id="date"
-
               type="date"
-
               value={
                 selectedDate
               }
-
               onChange={(e) =>
                 setSelectedDate(
                   e.target.value
@@ -955,25 +800,19 @@ export default function Home() {
             />
 
           </div>
-
         ) : (
-
           <div className="date-section">
 
             <label htmlFor="month">
               運行月
             </label>
 
-
             <input
               id="month"
-
               type="month"
-
               value={
                 selectedMonth
               }
-
               onChange={(e) =>
                 setSelectedMonth(
                   e.target.value
@@ -982,9 +821,7 @@ export default function Home() {
             />
 
           </div>
-
         )}
-
 
         {/* ==================================
             ルート
@@ -996,14 +833,11 @@ export default function Home() {
             ルート
           </label>
 
-
           <select
             id="route"
-
             value={
               selectedRoute
             }
-
             onChange={(e) =>
               setSelectedRoute(
                 e.target.value as RouteFilter
@@ -1013,12 +847,10 @@ export default function Home() {
 
             {routes.map(
               (route) => (
-
                 <option
                   key={
                     route.value
                   }
-
                   value={
                     route.value
                   }
@@ -1027,14 +859,12 @@ export default function Home() {
                     route.label
                   }
                 </option>
-
               )
             )}
 
           </select>
 
         </div>
-
 
         {/* ==================================
             協賛施設
@@ -1046,14 +876,11 @@ export default function Home() {
             協賛施設
           </label>
 
-
           <select
             id="facility"
-
             value={
               selectedFacility
             }
-
             onChange={(e) =>
               setSelectedFacility(
                 e.target.value
@@ -1065,15 +892,12 @@ export default function Home() {
               選択なし
             </option>
 
-
             {sponsorFacilities.map(
               (facility) => (
-
                 <option
                   key={
                     facility.id
                   }
-
                   value={
                     facility.id
                   }
@@ -1082,15 +906,12 @@ export default function Home() {
                     facility.name
                   }
                 </option>
-
               )
             )}
 
           </select>
 
-
           {selectedFacilityData && (
-
             <div className="facility-selected">
 
               選択中：
@@ -1101,11 +922,9 @@ export default function Home() {
               }
 
             </div>
-
           )}
 
         </div>
-
 
         {/* ==================================
             時間帯
@@ -1117,14 +936,12 @@ export default function Home() {
             時間帯
           </label>
 
-
           <button
             className={
               !useTimeFilter
                 ? "time-all-button active"
                 : "time-all-button"
             }
-
             onClick={
               clearTimeFilter
             }
@@ -1132,16 +949,13 @@ export default function Home() {
             すべて
           </button>
 
-
           <div className="time-input-row">
 
             <input
               type="time"
-
               value={
                 startTime
               }
-
               onChange={(e) =>
                 setStartTime(
                   e.target.value
@@ -1149,19 +963,15 @@ export default function Home() {
               }
             />
 
-
             <span>
               ～
             </span>
 
-
             <input
               type="time"
-
               value={
                 endTime
               }
-
               onChange={(e) =>
                 setEndTime(
                   e.target.value
@@ -1171,10 +981,8 @@ export default function Home() {
 
           </div>
 
-
           <button
             className="time-apply-button"
-
             onClick={
               applyTimeFilter
             }
@@ -1182,9 +990,7 @@ export default function Home() {
             この時間帯を適用
           </button>
 
-
           {useTimeFilter && (
-
             <p className="time-applied">
 
               {appliedStartTime}
@@ -1196,11 +1002,9 @@ export default function Home() {
               {" を表示中"}
 
             </p>
-
           )}
 
         </div>
-
 
         {/* ==================================
             乗車 / 降車
@@ -1212,12 +1016,9 @@ export default function Home() {
             className={
               displayMode ===
               "boarding"
-
                 ? "mode-button active"
-
                 : "mode-button"
             }
-
             onClick={() =>
               setDisplayMode(
                 "boarding"
@@ -1227,17 +1028,13 @@ export default function Home() {
             乗車
           </button>
 
-
           <button
             className={
               displayMode ===
               "alighting"
-
                 ? "mode-button active"
-
                 : "mode-button"
             }
-
             onClick={() =>
               setDisplayMode(
                 "alighting"
@@ -1248,7 +1045,6 @@ export default function Home() {
           </button>
 
         </div>
-
 
         {/* ==================================
             表示情報
@@ -1262,25 +1058,19 @@ export default function Home() {
 
               {displayMode ===
               "boarding"
-
                 ? "乗車地点"
-
                 : "降車地点"}
 
             </div>
-
 
             <div className="selected-date-text">
 
               {periodMode ===
               "day"
-
                 ? selectedDate
-
                 : selectedMonth}
 
             </div>
-
 
             <div className="selected-route-text">
 
@@ -1291,9 +1081,7 @@ export default function Home() {
 
             </div>
 
-
             {useTimeFilter && (
-
               <div className="selected-route-text">
 
                 時間：
@@ -1309,12 +1097,9 @@ export default function Home() {
                 }
 
               </div>
-
             )}
 
-
             {selectedFacilityData && (
-
               <div className="selected-route-text">
 
                 施設：
@@ -1324,11 +1109,9 @@ export default function Home() {
                 }
 
               </div>
-
             )}
 
           </div>
-
 
           <div className="record-count">
 
@@ -1342,12 +1125,7 @@ export default function Home() {
 
         </div>
 
-
       </div>
-
-
     </main>
-
   );
-
 }
