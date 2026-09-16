@@ -137,7 +137,6 @@ export default function Home() {
 
   /* ========================================
      協賛施設
-     "" = 選択なし
      ======================================== */
 
   const [selectedFacility, setSelectedFacility] =
@@ -161,6 +160,13 @@ export default function Home() {
 
   const [appliedEndTime, setAppliedEndTime] =
     useState("23:59");
+
+  /* ========================================
+     パネル最小化
+     ======================================== */
+
+  const [isPanelMinimized, setIsPanelMinimized] =
+    useState(false);
 
   /* ========================================
      読み込み
@@ -189,13 +195,7 @@ export default function Home() {
       try {
         /* ==================================
            Firebase Authentication
-           ==================================
-
-           Firestore Rulesで
-           request.auth != null
-           を条件にしているため、
-           Firestoreを読む前に匿名認証する。
-        */
+           ================================== */
 
         if (!auth.currentUser) {
           await signInAnonymously(auth);
@@ -270,10 +270,6 @@ export default function Home() {
 
           const monthNumber =
             Number(month);
-
-          /*
-           * その月の日数
-           */
 
           const daysInMonth =
             new Date(
@@ -442,16 +438,12 @@ export default function Home() {
             .trim()
             .toUpperCase();
 
-        /* すべて */
-
         if (
           selectedRoute ===
           "ALL"
         ) {
           return true;
         }
-
-        /* オレンジ */
 
         if (
           selectedRoute ===
@@ -463,8 +455,6 @@ export default function Home() {
           );
         }
 
-        /* ブルー */
-
         if (
           selectedRoute ===
           "BLUE"
@@ -474,8 +464,6 @@ export default function Home() {
             "BLUE"
           );
         }
-
-        /* Free */
 
         if (
           selectedRoute ===
@@ -498,32 +486,16 @@ export default function Home() {
   const filteredRecords =
     routeFilteredRecords.filter(
       (record) => {
-        /*
-         * 時間フィルターOFF
-         */
-
         if (!useTimeFilter) {
           return true;
         }
 
-        /*
-         * Timestamp → Date
-         */
-
         const date =
           record.time.toDate();
-
-        /*
-         * 記録時刻
-         */
 
         const recordMinutes =
           date.getHours() * 60 +
           date.getMinutes();
-
-        /*
-         * 開始時刻
-         */
 
         const [
           startHour,
@@ -532,10 +504,6 @@ export default function Home() {
           appliedStartTime
             .split(":")
             .map(Number);
-
-        /*
-         * 終了時刻
-         */
 
         const [
           endHour,
@@ -553,10 +521,6 @@ export default function Home() {
           endHour * 60 +
           endMinute;
 
-        /*
-         * 通常の時間帯
-         */
-
         if (
           startMinutes <=
           endMinutes
@@ -568,10 +532,6 @@ export default function Home() {
               endMinutes
           );
         }
-
-        /*
-         * 日付をまたぐ場合
-         */
 
         return (
           recordMinutes >=
@@ -723,386 +683,223 @@ export default function Home() {
           操作パネル
           ================================== */}
 
-      <div className="control-panel">
+      {isPanelMinimized ? (
+        <button
+          className="panel-toggle-button minimized"
+          onClick={() =>
+            setIsPanelMinimized(false)
+          }
+          aria-label="操作パネルを開く"
+          title="操作パネルを開く"
+        >
+          +
+        </button>
+      ) : (
+        <div className="control-panel">
 
-        {/* ==================================
-            タイトル
-            ================================== */}
+          {/* ==================================
+              パネルヘッダー
+              ================================== */}
 
-        <div className="panel-title">
-          <h1>
-            運行記録表示システム
-          </h1>
-        </div>
+          <div className="panel-header">
 
-        {/* ==================================
-            日ごと / 月ごと
-            ================================== */}
-
-        <div className="period-section">
-          <label>
-            表示期間
-          </label>
-
-          <div className="period-buttons">
-
-            <button
-              className={
-                periodMode === "day"
-                  ? "period-button active"
-                  : "period-button"
-              }
-              onClick={() =>
-                setPeriodMode("day")
-              }
-            >
-              日ごと
-            </button>
+            <div className="panel-title">
+              <h1>
+                運行記録表示システム
+              </h1>
+            </div>
 
             <button
-              className={
-                periodMode === "month"
-                  ? "period-button active"
-                  : "period-button"
-              }
+              className="panel-toggle-button"
               onClick={() =>
-                setPeriodMode("month")
+                setIsPanelMinimized(true)
               }
+              aria-label="操作パネルを最小化"
+              title="操作パネルを最小化"
             >
-              月ごと
+              −
             </button>
 
           </div>
-        </div>
 
-        {/* ==================================
-            日付 / 月
-            ================================== */}
+          {/* ==================================
+              日ごと / 月ごと
+              ================================== */}
 
-        {periodMode === "day" ? (
-          <div className="date-section">
+          <div className="period-section">
 
-            <label htmlFor="date">
-              運行日
+            <label>
+              表示期間
             </label>
 
-            <input
-              id="date"
-              type="date"
-              value={
-                selectedDate
-              }
-              onChange={(e) =>
-                setSelectedDate(
-                  e.target.value
-                )
-              }
-            />
+            <div className="period-buttons">
 
+              <button
+                className={
+                  periodMode === "day"
+                    ? "period-button active"
+                    : "period-button"
+                }
+                onClick={() =>
+                  setPeriodMode("day")
+                }
+              >
+                日ごと
+              </button>
+
+              <button
+                className={
+                  periodMode === "month"
+                    ? "period-button active"
+                    : "period-button"
+                }
+                onClick={() =>
+                  setPeriodMode("month")
+                }
+              >
+                月ごと
+              </button>
+
+            </div>
           </div>
-        ) : (
-          <div className="date-section">
 
-            <label htmlFor="month">
-              運行月
-            </label>
+          {/* ==================================
+              日付 / 月
+              ================================== */}
 
-            <input
-              id="month"
-              type="month"
-              value={
-                selectedMonth
-              }
-              onChange={(e) =>
-                setSelectedMonth(
-                  e.target.value
-                )
-              }
-            />
+          {periodMode === "day" ? (
+            <div className="date-section">
 
-          </div>
-        )}
+              <label htmlFor="date">
+                運行日
+              </label>
 
-        {/* ==================================
-            ルート
-            ================================== */}
+              <input
+                id="date"
+                type="date"
+                value={
+                  selectedDate
+                }
+                onChange={(e) =>
+                  setSelectedDate(
+                    e.target.value
+                  )
+                }
+              />
 
-        <div className="route-section">
+            </div>
+          ) : (
+            <div className="date-section">
 
-          <label htmlFor="route">
-            ルート
-          </label>
+              <label htmlFor="month">
+                運行月
+              </label>
 
-          <select
-            id="route"
-            value={
-              selectedRoute
-            }
-            onChange={(e) =>
-              setSelectedRoute(
-                e.target.value as RouteFilter
-              )
-            }
-          >
-
-            {routes.map(
-              (route) => (
-                <option
-                  key={
-                    route.value
-                  }
-                  value={
-                    route.value
-                  }
-                >
-                  {
-                    route.label
-                  }
-                </option>
-              )
-            )}
-
-          </select>
-
-        </div>
-
-        {/* ==================================
-            協賛施設
-            ================================== */}
-
-        <div className="facility-section">
-
-          <label htmlFor="facility">
-            協賛施設
-          </label>
-
-          <select
-            id="facility"
-            value={
-              selectedFacility
-            }
-            onChange={(e) =>
-              setSelectedFacility(
-                e.target.value
-              )
-            }
-          >
-
-            <option value="">
-              選択なし
-            </option>
-
-            {sponsorFacilities.map(
-              (facility) => (
-                <option
-                  key={
-                    facility.id
-                  }
-                  value={
-                    facility.id
-                  }
-                >
-                  {
-                    facility.name
-                  }
-                </option>
-              )
-            )}
-
-          </select>
-
-          {selectedFacilityData && (
-            <div className="facility-selected">
-
-              選択中：
-              <br />
-
-              {
-                selectedFacilityData.name
-              }
+              <input
+                id="month"
+                type="month"
+                value={
+                  selectedMonth
+                }
+                onChange={(e) =>
+                  setSelectedMonth(
+                    e.target.value
+                  )
+                }
+              />
 
             </div>
           )}
 
-        </div>
+          {/* ==================================
+              ルート
+              ================================== */}
 
-        {/* ==================================
-            時間帯
-            ================================== */}
+          <div className="route-section">
 
-        <div className="time-section">
+            <label htmlFor="route">
+              ルート
+            </label>
 
-          <label>
-            時間帯
-          </label>
-
-          <button
-            className={
-              !useTimeFilter
-                ? "time-all-button active"
-                : "time-all-button"
-            }
-            onClick={
-              clearTimeFilter
-            }
-          >
-            すべて
-          </button>
-
-          <div className="time-input-row">
-
-            <input
-              type="time"
+            <select
+              id="route"
               value={
-                startTime
+                selectedRoute
               }
               onChange={(e) =>
-                setStartTime(
-                  e.target.value
+                setSelectedRoute(
+                  e.target.value as RouteFilter
                 )
               }
-            />
-
-            <span>
-              ～
-            </span>
-
-            <input
-              type="time"
-              value={
-                endTime
-              }
-              onChange={(e) =>
-                setEndTime(
-                  e.target.value
+            >
+              {routes.map(
+                (route) => (
+                  <option
+                    key={
+                      route.value
+                    }
+                    value={
+                      route.value
+                    }
+                  >
+                    {
+                      route.label
+                    }
+                  </option>
                 )
-              }
-            />
+              )}
+            </select>
 
           </div>
 
-          <button
-            className="time-apply-button"
-            onClick={
-              applyTimeFilter
-            }
-          >
-            この時間帯を適用
-          </button>
+          {/* ==================================
+              協賛施設
+              ================================== */}
 
-          {useTimeFilter && (
-            <p className="time-applied">
+          <div className="facility-section">
 
-              {appliedStartTime}
+            <label htmlFor="facility">
+              協賛施設
+            </label>
 
-              {" ～ "}
-
-              {appliedEndTime}
-
-              {" を表示中"}
-
-            </p>
-          )}
-
-        </div>
-
-        {/* ==================================
-            乗車 / 降車
-            ================================== */}
-
-        <div className="mode-buttons">
-
-          <button
-            className={
-              displayMode ===
-              "boarding"
-                ? "mode-button active"
-                : "mode-button"
-            }
-            onClick={() =>
-              setDisplayMode(
-                "boarding"
-              )
-            }
-          >
-            乗車
-          </button>
-
-          <button
-            className={
-              displayMode ===
-              "alighting"
-                ? "mode-button active"
-                : "mode-button"
-            }
-            onClick={() =>
-              setDisplayMode(
-                "alighting"
-              )
-            }
-          >
-            降車
-          </button>
-
-        </div>
-
-        {/* ==================================
-            表示情報
-            ================================== */}
-
-        <div className="display-info">
-
-          <div>
-
-            <div className="display-mode">
-
-              {displayMode ===
-              "boarding"
-                ? "乗車地点"
-                : "降車地点"}
-
-            </div>
-
-            <div className="selected-date-text">
-
-              {periodMode ===
-              "day"
-                ? selectedDate
-                : selectedMonth}
-
-            </div>
-
-            <div className="selected-route-text">
-
-              ルート：
-              {
-                selectedRouteLabel
+            <select
+              id="facility"
+              value={
+                selectedFacility
               }
+              onChange={(e) =>
+                setSelectedFacility(
+                  e.target.value
+                )
+              }
+            >
+              <option value="">
+                選択なし
+              </option>
 
-            </div>
-
-            {useTimeFilter && (
-              <div className="selected-route-text">
-
-                時間：
-
-                {
-                  appliedStartTime
-                }
-
-                {" ～ "}
-
-                {
-                  appliedEndTime
-                }
-
-              </div>
-            )}
+              {sponsorFacilities.map(
+                (facility) => (
+                  <option
+                    key={
+                      facility.id
+                    }
+                    value={
+                      facility.id
+                    }
+                  >
+                    {
+                      facility.name
+                    }
+                  </option>
+                )
+              )}
+            </select>
 
             {selectedFacilityData && (
-              <div className="selected-route-text">
+              <div className="facility-selected">
 
-                施設：
+                選択中：
+                <br />
 
                 {
                   selectedFacilityData.name
@@ -1113,19 +910,208 @@ export default function Home() {
 
           </div>
 
-          <div className="record-count">
+          {/* ==================================
+              時間帯
+              ================================== */}
 
-            {
-              filteredRecords.length
-            }
+          <div className="time-section">
 
-            件
+            <label>
+              時間帯
+            </label>
+
+            <button
+              className={
+                !useTimeFilter
+                  ? "time-all-button active"
+                  : "time-all-button"
+              }
+              onClick={
+                clearTimeFilter
+              }
+            >
+              すべて
+            </button>
+
+            <div className="time-input-row">
+
+              <input
+                type="time"
+                value={
+                  startTime
+                }
+                onChange={(e) =>
+                  setStartTime(
+                    e.target.value
+                  )
+                }
+              />
+
+              <span>
+                ～
+              </span>
+
+              <input
+                type="time"
+                value={
+                  endTime
+                }
+                onChange={(e) =>
+                  setEndTime(
+                    e.target.value
+                  )
+                }
+              />
+
+            </div>
+
+            <button
+              className="time-apply-button"
+              onClick={
+                applyTimeFilter
+              }
+            >
+              この時間帯を適用
+            </button>
+
+            {useTimeFilter && (
+              <p className="time-applied">
+
+                {appliedStartTime}
+
+                {" ～ "}
+
+                {appliedEndTime}
+
+                {" を表示中"}
+
+              </p>
+            )}
+
+          </div>
+
+          {/* ==================================
+              乗車 / 降車
+              ================================== */}
+
+          <div className="mode-buttons">
+
+            <button
+              className={
+                displayMode ===
+                "boarding"
+                  ? "mode-button active"
+                  : "mode-button"
+              }
+              onClick={() =>
+                setDisplayMode(
+                  "boarding"
+                )
+              }
+            >
+              乗車
+            </button>
+
+            <button
+              className={
+                displayMode ===
+                "alighting"
+                  ? "mode-button active"
+                  : "mode-button"
+              }
+              onClick={() =>
+                setDisplayMode(
+                  "alighting"
+                )
+              }
+            >
+              降車
+            </button>
+
+          </div>
+
+          {/* ==================================
+              表示情報
+              ================================== */}
+
+          <div className="display-info">
+
+            <div>
+
+              <div className="display-mode">
+
+                {displayMode ===
+                "boarding"
+                  ? "乗車地点"
+                  : "降車地点"}
+
+              </div>
+
+              <div className="selected-date-text">
+
+                {periodMode ===
+                "day"
+                  ? selectedDate
+                  : selectedMonth}
+
+              </div>
+
+              <div className="selected-route-text">
+
+                ルート：
+                {
+                  selectedRouteLabel
+                }
+
+              </div>
+
+              {useTimeFilter && (
+                <div className="selected-route-text">
+
+                  時間：
+
+                  {
+                    appliedStartTime
+                  }
+
+                  {" ～ "}
+
+                  {
+                    appliedEndTime
+                  }
+
+                </div>
+              )}
+
+              {selectedFacilityData && (
+                <div className="selected-route-text">
+
+                  施設：
+
+                  {
+                    selectedFacilityData.name
+                  }
+
+                </div>
+              )}
+
+            </div>
+
+            <div className="record-count">
+
+              {
+                filteredRecords.length
+              }
+
+              件
+
+            </div>
 
           </div>
 
         </div>
+      )}
 
-      </div>
     </main>
   );
 }
