@@ -80,15 +80,32 @@ const sponsorFacilities: SponsorFacility[] = [
   {
     id: "crossport",
     name: "幕張ベイパーク クロスポート",
-    latitude: 35.6409,
-    longitude: 140.0462,
+    latitude: 35.6467027877686,
+    longitude: 140.04998703776445,
   },
-
+  {
+    id: "kameda",
+    name: "亀田ホームクリニック幕張",
+    latitude: 35.64391458150275,
+    longitude: 140.05389912242066,
+  },
+  {
+    id: "neighborhood-dock",
+    name: "MAKUHARI NEIGHBORHOOD DOCK",
+    latitude: 35.64450136700986,
+    longitude: 140.05178110892845,
+  },
+  {
+    id: "makuhari-messe",
+    name: "幕張メッセ",
+    latitude: 35.64785122248293,
+    longitude: 140.0354642224209,
+  },
   {
     id: "yanmar",
     name: "幕張ベイタウン フレッシュランド ヤンマー",
-    latitude: 35.6398,
-    longitude: 140.0465,
+    latitude: 35.641005855848945,
+    longitude: 140.0459376377642,
   },
 ];
 
