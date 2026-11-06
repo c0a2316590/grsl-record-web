@@ -16,7 +16,6 @@ import "leaflet/dist/leaflet.css";
 
 import { useEffect, useState } from "react";
 
-
 /* ============================================================
    運行記録
    ============================================================ */
@@ -31,15 +30,11 @@ type MapRecord = {
   time: string;
 };
 
-
 /* ============================================================
    表示期間
    ============================================================ */
 
-type PeriodMode =
-  | "day"
-  | "month";
-
+type PeriodMode = "day" | "month";
 
 /* ============================================================
    ルート選択
@@ -47,10 +42,9 @@ type PeriodMode =
 
 type RouteFilter =
   | "ALL"
-  | "ORANGE"
-  | "BLUE"
-  | "FREE";
-
+  | "FREE"
+  | "CIRCULATION"
+  | "MORNING_ACTIVITY";
 
 /* ============================================================
    GeoJSONルート座標
@@ -61,119 +55,75 @@ type RouteCoordinates = [
   number
 ][];
 
-
 /* ============================================================
    協賛施設
    ============================================================ */
 
 type SelectedFacility = {
-
   id: string;
-
   name: string;
-
   latitude: number;
-
   longitude: number;
-
 };
-
 
 /* ============================================================
    月表示でまとめた地点
    ============================================================ */
 
 type MonthlyCluster = {
-
   id: string;
-
   latitude: number;
-
   longitude: number;
-
   totalPassenger: number;
-
   recordCount: number;
-
   routeTypes: string[];
-
 };
-
 
 /* ============================================================
    50m以内か判定する距離
    ============================================================ */
 
-const CLUSTER_DISTANCE_METERS =
-  50;
-
+const CLUSTER_DISTANCE_METERS = 50;
 
 /* ============================================================
    2地点間の距離を計算
    ============================================================ */
 
 function calculateDistanceMeters(
-
   latitude1: number,
-
   longitude1: number,
-
   latitude2: number,
-
   longitude2: number
-
 ) {
-
-  const earthRadius =
-    6371000;
-
+  const earthRadius = 6371000;
 
   const lat1 =
     latitude1 *
     Math.PI /
     180;
 
-
   const lat2 =
     latitude2 *
     Math.PI /
     180;
 
-
   const deltaLat =
-    (
-      latitude2 -
-      latitude1
-    ) *
+    (latitude2 - latitude1) *
     Math.PI /
     180;
-
 
   const deltaLon =
-    (
-      longitude2 -
-      longitude1
-    ) *
+    (longitude2 - longitude1) *
     Math.PI /
     180;
 
-
   const a =
-    Math.sin(
-      deltaLat / 2
-    ) *
-    Math.sin(
-      deltaLat / 2
-    ) +
+    Math.sin(deltaLat / 2) *
+    Math.sin(deltaLat / 2) +
     Math.cos(lat1) *
     Math.cos(lat2) *
-    Math.sin(
-      deltaLon / 2
-    ) *
-    Math.sin(
-      deltaLon / 2
-    );
-
+    Math.sin(deltaLon / 2) *
+    Math.sin(deltaLon / 2);
 
   const c =
     2 *
@@ -182,261 +132,151 @@ function calculateDistanceMeters(
       Math.sqrt(1 - a)
     );
 
-
-  return (
-    earthRadius *
-    c
-  );
-
+  return earthRadius * c;
 }
-
 
 /* ============================================================
    月表示用の地点集約
    ============================================================ */
 
 function createMonthlyClusters(
-
   records: MapRecord[]
-
 ): MonthlyCluster[] {
 
-  const clusters:
-    MonthlyCluster[] = [];
+  const clusters: MonthlyCluster[] = [];
 
+  records.forEach((record) => {
 
-  records.forEach(
-    (record) => {
+    const passenger =
+      Math.abs(record.passengerChange);
 
-      const passenger =
-        Math.abs(
-          record.passengerChange
-        );
+    let targetCluster: MonthlyCluster | null = null;
 
+    for (const cluster of clusters) {
 
-      let targetCluster:
-        MonthlyCluster | null =
-        null;
+      const distance = calculateDistanceMeters(
+        record.latitude,
+        record.longitude,
+        cluster.latitude,
+        cluster.longitude
+      );
 
-
-      for (
-        const cluster
-        of clusters
-      ) {
-
-        const distance =
-          calculateDistanceMeters(
-
-            record.latitude,
-
-            record.longitude,
-
-            cluster.latitude,
-
-            cluster.longitude
-
-          );
-
-
-        if (
-          distance <=
-          CLUSTER_DISTANCE_METERS
-        ) {
-
-          targetCluster =
-            cluster;
-
-          break;
-
-        }
-
+      if (distance <= CLUSTER_DISTANCE_METERS) {
+        targetCluster = cluster;
+        break;
       }
+    }
 
+    /* ======================================================
+       既存の集約地点がある場合
+       ====================================================== */
 
-      /* ======================================================
-         既存の集約地点がある場合
-         ====================================================== */
+    if (targetCluster) {
 
-      if (
-        targetCluster
-      ) {
+      targetCluster.totalPassenger += passenger;
 
-        targetCluster.totalPassenger +=
-          passenger;
+      targetCluster.recordCount += 1;
 
+      /*
+       * 座標を平均化
+       */
 
-        targetCluster.recordCount +=
-          1;
+      targetCluster.latitude =
+        (
+          targetCluster.latitude *
+            (targetCluster.recordCount - 1) +
+          record.latitude
+        ) /
+        targetCluster.recordCount;
 
+      targetCluster.longitude =
+        (
+          targetCluster.longitude *
+            (targetCluster.recordCount - 1) +
+          record.longitude
+        ) /
+        targetCluster.recordCount;
 
-        /*
-         * 座標を平均化
-         */
+      /*
+       * ルート情報
+       */
 
-        targetCluster.latitude =
-          (
-            targetCluster.latitude *
-              (
-                targetCluster.recordCount -
-                1
-              ) +
-            record.latitude
-          ) /
-          targetCluster.recordCount;
+      const routeType = String(record.routeType)
+        .trim()
+        .toUpperCase();
 
-
-        targetCluster.longitude =
-          (
-            targetCluster.longitude *
-              (
-                targetCluster.recordCount -
-                1
-              ) +
-            record.longitude
-          ) /
-          targetCluster.recordCount;
-
-
-        /*
-         * ルート情報
-         */
-
-        const routeType =
-          String(
-            record.routeType
-          )
-            .trim()
-            .toUpperCase();
-
-
-        if (
-          !targetCluster.routeTypes.includes(
-            routeType
-          )
-        ) {
-
-          targetCluster.routeTypes.push(
-            routeType
-          );
-
-        }
-
-      }
-
-
-      /* ======================================================
-         新しい集約地点の場合
-         ====================================================== */
-
-      else {
-
-        clusters.push({
-
-          id:
-            `cluster_${record.id}`,
-
-          latitude:
-            record.latitude,
-
-          longitude:
-            record.longitude,
-
-          totalPassenger:
-            passenger,
-
-          recordCount:
-            1,
-
-          routeTypes: [
-
-            String(
-              record.routeType
-            )
-              .trim()
-              .toUpperCase(),
-
-          ],
-
-        });
-
+      if (!targetCluster.routeTypes.includes(routeType)) {
+        targetCluster.routeTypes.push(routeType);
       }
 
     }
-  );
 
+    /* ======================================================
+       新しい集約地点の場合
+       ====================================================== */
+
+    else {
+
+      clusters.push({
+
+        id: `cluster_${record.id}`,
+
+        latitude: record.latitude,
+
+        longitude: record.longitude,
+
+        totalPassenger: passenger,
+
+        recordCount: 1,
+
+        routeTypes: [
+          String(record.routeType)
+            .trim()
+            .toUpperCase(),
+        ],
+
+      });
+
+    }
+
+  });
 
   return clusters;
-
 }
-
 
 /* ============================================================
    日ごとのピン
    ============================================================ */
 
 function createDailyPassengerIcon(
-
   passengerChange: number
-
 ) {
 
-  const count =
-    Math.abs(
-      passengerChange
-    );
+  const count = Math.abs(passengerChange);
 
-
-  let size =
-    36;
-
-  let color =
-    "#4CAF50";
-
+  let size = 36;
+  let color = "#4CAF50";
 
   /* 1人 */
 
-  if (
-    count === 1
-  ) {
-
-    size =
-      36;
-
-    color =
-      "#4CAF50";
-
+  if (count === 1) {
+    size = 36;
+    color = "#4CAF50";
   }
-
 
   /* 2人 */
 
-  else if (
-    count === 2
-  ) {
-
-    size =
-      46;
-
-    color =
-      "#FF9800";
-
+  else if (count === 2) {
+    size = 46;
+    color = "#FF9800";
   }
-
 
   /* 3人以上 */
 
-  else if (
-    count >= 3
-  ) {
-
-    size =
-      58;
-
-    color =
-      "#F44336";
-
+  else if (count >= 3) {
+    size = 58;
+    color = "#F44336";
   }
-
 
   return L.divIcon({
 
@@ -470,10 +310,7 @@ function createDailyPassengerIcon(
           color: white;
 
           font-size:
-            ${Math.max(
-              14,
-              size * 0.4
-            )}px;
+            ${Math.max(14, size * 0.4)}px;
 
           font-weight: bold;
 
@@ -489,116 +326,64 @@ function createDailyPassengerIcon(
     `,
 
     iconSize: [
-
       size,
-
       size,
-
     ],
 
     iconAnchor: [
-
       size / 2,
-
       size / 2,
-
     ],
 
     popupAnchor: [
-
       0,
-
       -size / 2,
-
     ],
 
   });
-
 }
-
 
 /* ============================================================
    月ごとのピン
    ============================================================ */
 
 function createMonthlyPassengerIcon(
-
   totalPassenger: number
-
 ) {
 
-  let size =
-    36;
-
-  let color =
-    "#4CAF50";
-
+  let size = 36;
+  let color = "#4CAF50";
 
   /* 1～10人 */
 
-  if (
-    totalPassenger <= 10
-  ) {
-
-    size =
-      36;
-
-    color =
-      "#4CAF50";
-
+  if (totalPassenger <= 10) {
+    size = 36;
+    color = "#4CAF50";
   }
-
 
   /* 11～30人 */
 
-  else if (
-    totalPassenger <= 30
-  ) {
-
-    size =
-      48;
-
-    color =
-      "#FF9800";
-
+  else if (totalPassenger <= 30) {
+    size = 48;
+    color = "#FF9800";
   }
-
 
   /* 31人以上 */
 
   else {
-
-    size =
-      60;
-
-    color =
-      "#F44336";
-
+    size = 60;
+    color = "#F44336";
   }
 
+  let fontSize = 16;
 
-  let fontSize =
-    16;
-
-
-  if (
-    totalPassenger >= 100
-  ) {
-
-    fontSize =
-      13;
-
+  if (totalPassenger >= 100) {
+    fontSize = 13;
   }
 
-  else if (
-    totalPassenger >= 50
-  ) {
-
-    fontSize =
-      15;
-
+  else if (totalPassenger >= 50) {
+    fontSize = 15;
   }
-
 
   return L.divIcon({
 
@@ -649,33 +434,22 @@ function createMonthlyPassengerIcon(
     `,
 
     iconSize: [
-
       size,
-
       size,
-
     ],
 
     iconAnchor: [
-
       size / 2,
-
       size / 2,
-
     ],
 
     popupAnchor: [
-
       0,
-
       -size / 2,
-
     ],
 
   });
-
 }
-
 
 /* ============================================================
    協賛施設用マーカー
@@ -685,8 +459,7 @@ function createFacilityIcon() {
 
   return L.divIcon({
 
-    className:
-      "facility-marker-wrapper",
+    className: "facility-marker-wrapper",
 
     html: `
 
@@ -797,83 +570,50 @@ function createFacilityIcon() {
     `,
 
     iconSize: [
-
       48,
-
       58,
-
     ],
 
     iconAnchor: [
-
       24,
-
       42,
-
     ],
 
     popupAnchor: [
-
       0,
-
       -42,
-
     ],
 
   });
-
 }
-
 
 /* ============================================================
    選択施設へ地図を移動する
    ============================================================ */
 
 function FacilityMapController({
-
   selectedFacility,
-
 }: {
-
-  selectedFacility:
-    SelectedFacility | null;
-
+  selectedFacility: SelectedFacility | null;
 }) {
 
-  const map =
-    useMap();
-
+  const map = useMap();
 
   useEffect(() => {
 
-    if (
-      !selectedFacility
-    ) {
-
+    if (!selectedFacility) {
       return;
-
     }
 
-
     map.flyTo(
-
       [
-
         selectedFacility.latitude,
-
         selectedFacility.longitude,
-
       ],
-
       17,
-
       {
-
-        duration:
-          1.2,
-
+        duration: 1.2,
       }
-
     );
 
   }, [
@@ -881,62 +621,43 @@ function FacilityMapController({
     map,
   ]);
 
-
   return null;
-
 }
-
 
 /* ============================================================
    GeoJSON読み込み
    ============================================================ */
 
 async function loadRouteGeoJSON(
-
   path: string
-
 ): Promise<RouteCoordinates> {
 
-  const response =
-    await fetch(path);
+  const response = await fetch(path);
 
-
-  if (
-    !response.ok
-  ) {
-
+  if (!response.ok) {
     throw new Error(
       `${path} の読み込みに失敗しました`
     );
-
   }
 
-
-  const data =
-    await response.json();
-
+  const data = await response.json();
 
   /* FeatureCollection */
 
   if (
-    data.type ===
-      "FeatureCollection" &&
+    data.type === "FeatureCollection" &&
     data.features &&
     data.features.length > 0
   ) {
 
-    const feature =
-      data.features[0];
-
+    const feature = data.features[0];
 
     if (
       feature.geometry &&
-      feature.geometry.type ===
-        "LineString"
+      feature.geometry.type === "LineString"
     ) {
 
       return feature.geometry.coordinates.map(
-
         (
           coordinate: [
             number,
@@ -945,34 +666,25 @@ async function loadRouteGeoJSON(
         ) => {
 
           return [
-
             coordinate[1],
-
             coordinate[0],
-
           ];
 
         }
-
       );
 
     }
-
   }
-
 
   /* Feature */
 
   if (
-    data.type ===
-      "Feature" &&
+    data.type === "Feature" &&
     data.geometry &&
-    data.geometry.type ===
-      "LineString"
+    data.geometry.type === "LineString"
   ) {
 
     return data.geometry.coordinates.map(
-
       (
         coordinate: [
           number,
@@ -981,26 +693,19 @@ async function loadRouteGeoJSON(
       ) => {
 
         return [
-
           coordinate[1],
-
           coordinate[0],
-
         ];
 
       }
-
     );
 
   }
 
-
   throw new Error(
     `${path} にLineStringのルートがありません`
   );
-
 }
-
 
 /* ============================================================
    Map
@@ -1010,31 +715,23 @@ export default function Map({
 
   records,
 
-  selectedRoute =
-    "ALL",
+  selectedRoute = "ALL",
 
-  periodMode =
-    "day",
+  periodMode = "day",
 
-  selectedFacility =
-    null,
+  selectedFacility = null,
 
 }: {
 
-  records:
-    MapRecord[];
+  records: MapRecord[];
 
-  selectedRoute?:
-    RouteFilter;
+  selectedRoute?: RouteFilter;
 
-  periodMode?:
-    PeriodMode;
+  periodMode?: PeriodMode;
 
-  selectedFacility?:
-    SelectedFacility | null;
+  selectedFacility?: SelectedFacility | null;
 
 }) {
-
 
   /* ==========================================================
      地図中心
@@ -1044,13 +741,9 @@ export default function Map({
     number,
     number
   ] = [
-
     35.6406891,
-
     140.0466451,
-
   ];
-
 
   /* ==========================================================
      オレンジルート
@@ -1059,10 +752,7 @@ export default function Map({
   const [
     orangeRoute,
     setOrangeRoute,
-  ] = useState<RouteCoordinates>(
-    []
-  );
-
+  ] = useState<RouteCoordinates>([]);
 
   /* ==========================================================
      ブルールート
@@ -1071,10 +761,7 @@ export default function Map({
   const [
     blueRoute,
     setBlueRoute,
-  ] = useState<RouteCoordinates>(
-    []
-  );
-
+  ] = useState<RouteCoordinates>([]);
 
   /* ==========================================================
      ルート読み込み状態
@@ -1085,7 +772,6 @@ export default function Map({
     setRouteLoading,
   ] = useState(true);
 
-
   /* ==========================================================
      ルート読み込みエラー
      ========================================================== */
@@ -1095,192 +781,124 @@ export default function Map({
     setRouteError,
   ] = useState("");
 
-
   /* ==========================================================
      GeoJSON読み込み
      ========================================================== */
 
   useEffect(() => {
 
-    const loadRoutes =
-      async () => {
+    const loadRoutes = async () => {
 
-        try {
+      try {
 
-          setRouteLoading(
-            true
-          );
+        setRouteLoading(true);
+        setRouteError("");
 
-          setRouteError(
-            ""
-          );
+        const [
+          orange,
+          blue,
+        ] = await Promise.all([
 
+          loadRouteGeoJSON(
+            "/routes/orange.geojson"
+          ),
 
-          const [
-            orange,
-            blue,
-          ] = await Promise.all([
+          loadRouteGeoJSON(
+            "/routes/blue.geojson"
+          ),
 
-            loadRouteGeoJSON(
-              "/routes/orange.geojson"
-            ),
+        ]);
 
-            loadRouteGeoJSON(
-              "/routes/blue.geojson"
-            ),
+        console.log(
+          "オレンジルート読み込み完了:",
+          orange
+        );
 
-          ]);
+        console.log(
+          "ブルールート読み込み完了:",
+          blue
+        );
 
+        setOrangeRoute(orange);
+        setBlueRoute(blue);
 
-          console.log(
-            "オレンジルート読み込み完了:",
-            orange
-          );
+      } catch (error) {
 
-
-          console.log(
-            "ブルールート読み込み完了:",
-            blue
-          );
-
-
-          setOrangeRoute(
-            orange
-          );
-
-
-          setBlueRoute(
-            blue
-          );
-
-
-        } catch (
+        console.error(
+          "GeoJSON読み込みエラー:",
           error
-        ) {
+        );
 
-          console.error(
-            "GeoJSON読み込みエラー:",
-            error
-          );
+        setRouteError(
+          "ルートデータを読み込めませんでした。"
+        );
 
+      } finally {
 
-          setRouteError(
-            "ルートデータを読み込めませんでした。"
-          );
+        setRouteLoading(false);
 
-
-        } finally {
-
-          setRouteLoading(
-            false
-          );
-
-        }
-
-      };
-
+      }
+    };
 
     loadRoutes();
 
   }, []);
 
-
   /* ==========================================================
      ルート表示判定
+
+     選択中の運行形態に関係なく、
+     両方のルートを常に表示する
      ========================================================== */
 
-  const showOrangeRoute =
-    selectedRoute ===
-      "ALL" ||
-    selectedRoute ===
-      "ORANGE";
+  const showOrangeRoute = true;
 
-
-  const showBlueRoute =
-    selectedRoute ===
-      "ALL" ||
-    selectedRoute ===
-      "BLUE";
-
+  const showBlueRoute = true;
 
   /* ==========================================================
      運行記録のルート絞り込み
      ========================================================== */
 
   const visibleRecords =
-    records.filter(
-      (record) => {
+    records.filter((record) => {
 
-        const routeType =
-          String(
-            record.routeType
-          )
-            .trim()
-            .toUpperCase();
+      const routeType = String(record.routeType)
+        .trim()
+        .toUpperCase();
 
+      /* すべて */
 
-        /* すべて */
-
-        if (
-          selectedRoute ===
-          "ALL"
-        ) {
-
-          return true;
-
-        }
-
-
-        /* オレンジ */
-
-        if (
-          selectedRoute ===
-          "ORANGE"
-        ) {
-
-          return (
-            routeType ===
-            "ORANGE"
-          );
-
-        }
-
-
-        /* ブルー */
-
-        if (
-          selectedRoute ===
-          "BLUE"
-        ) {
-
-          return (
-            routeType ===
-            "BLUE"
-          );
-
-        }
-
-
-        /* Free */
-
-        if (
-          selectedRoute ===
-          "FREE"
-        ) {
-
-          return (
-            routeType ===
-            "FREE"
-          );
-
-        }
-
-
-        return false;
-
+      if (selectedRoute === "ALL") {
+        return true;
       }
-    );
 
+      /* フリー運行 */
+
+      if (selectedRoute === "FREE") {
+        return routeType === "FREE";
+      }
+
+      /* 循環ルート
+         旧データのORANGE・BLUEも含める
+      */
+
+      if (selectedRoute === "CIRCULATION") {
+        return (
+          routeType === "CIRCULATION" ||
+          routeType === "ORANGE" ||
+          routeType === "BLUE"
+        );
+      }
+
+      /* 朝活運行 */
+
+      if (selectedRoute === "MORNING_ACTIVITY") {
+        return routeType === "MORNING_ACTIVITY";
+      }
+
+      return false;
+
+    });
 
   /* ==========================================================
      月表示の場合だけ50m以内を集約
@@ -1288,11 +906,8 @@ export default function Map({
 
   const monthlyClusters =
     periodMode === "month"
-      ? createMonthlyClusters(
-          visibleRecords
-        )
+      ? createMonthlyClusters(visibleRecords)
       : [];
-
 
   /* ==========================================================
      地図
@@ -1303,18 +918,14 @@ export default function Map({
     <div
       style={{
 
-        width:
-          "100%",
+        width: "100%",
 
-        height:
-          "100%",
+        height: "100%",
 
-        position:
-          "relative",
+        position: "relative",
 
       }}
     >
-
 
       {/* ======================================================
           Leaflet
@@ -1322,43 +933,29 @@ export default function Map({
 
       <MapContainer
 
-        center={
-          center
-        }
+        center={center}
 
-        zoom={
-          15
-        }
+        zoom={15}
 
-        scrollWheelZoom={
-          true
-        }
+        scrollWheelZoom={true}
 
         style={{
 
-          width:
-            "100%",
+          width: "100%",
 
-          height:
-            "100%",
+          height: "100%",
 
         }}
 
       >
-
 
         {/* ====================================================
             選択施設へ移動
             ==================================================== */}
 
         <FacilityMapController
-
-          selectedFacility={
-            selectedFacility
-          }
-
+          selectedFacility={selectedFacility}
         />
-
 
         {/* ====================================================
             OpenStreetMap
@@ -1366,106 +963,81 @@ export default function Map({
 
         <TileLayer
 
-          attribution=
-            "&copy; OpenStreetMap contributors"
+          attribution="&copy; OpenStreetMap contributors"
 
-          url=
-            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
 
         />
-
 
         {/* ====================================================
             オレンジルート
             ==================================================== */}
 
         {showOrangeRoute &&
-          orangeRoute.length >
-            0 && (
+          orangeRoute.length > 0 && (
 
-          <Polyline
+            <Polyline
 
-            positions={
-              orangeRoute
-            }
+              positions={orangeRoute}
 
-            pathOptions={{
+              pathOptions={{
 
-              color:
-                "#ff6600",
+                color: "#ff6600",
 
-              weight:
-                6,
+                weight: 6,
 
-              opacity:
-                0.85,
+                opacity: 0.85,
 
-              lineCap:
-                "round",
+                lineCap: "round",
 
-              lineJoin:
-                "round",
+                lineJoin: "round",
 
-            }}
+              }}
 
-          >
+            >
 
-            <Tooltip sticky>
+              <Tooltip sticky>
+                オレンジルート
+              </Tooltip>
 
-              オレンジルート
+            </Polyline>
 
-            </Tooltip>
-
-          </Polyline>
-
-        )}
-
+          )}
 
         {/* ====================================================
             ブルールート
             ==================================================== */}
 
         {showBlueRoute &&
-          blueRoute.length >
-            0 && (
+          blueRoute.length > 0 && (
 
-          <Polyline
+            <Polyline
 
-            positions={
-              blueRoute
-            }
+              positions={blueRoute}
 
-            pathOptions={{
+              pathOptions={{
 
-              color:
-                "#2979ff",
+                color: "#2979ff",
 
-              weight:
-                6,
+                weight: 6,
 
-              opacity:
-                0.85,
+                opacity: 0.85,
 
-              lineCap:
-                "round",
+                lineCap: "round",
 
-              lineJoin:
-                "round",
+                lineJoin: "round",
 
-            }}
+              }}
 
-          >
+            >
 
-            <Tooltip sticky>
+              <Tooltip sticky>
+                ブルールート
+              </Tooltip>
 
-              ブルールート
+            </Polyline>
 
-            </Tooltip>
-
-          </Polyline>
-
-        )}
-
+          )}
 
         {/* ====================================================
             日ごとのピン
@@ -1473,151 +1045,138 @@ export default function Map({
 
         {periodMode === "day" &&
 
-          visibleRecords.map(
-            (record) => (
+          visibleRecords.map((record) => (
 
-              <Marker
+            <Marker
 
-                key={
-                  record.id
-                }
+              key={record.id}
 
-                position={[
+              position={[
+                record.latitude,
+                record.longitude,
+              ]}
 
-                  record.latitude,
+              icon={createDailyPassengerIcon(
+                record.passengerChange
+              )}
 
-                  record.longitude,
+            >
 
-                ]}
+              <Popup>
 
-                icon={
-                  createDailyPassengerIcon(
-                    record.passengerChange
-                  )
-                }
+                <div
+                  style={{
 
-              >
+                    minWidth: "220px",
 
-                <Popup>
+                    fontSize: "16px",
 
-                  <div
+                    lineHeight: "1.8",
+
+                  }}
+                >
+
+                  <h3
                     style={{
 
-                      minWidth:
-                        "220px",
+                      margin: "0 0 10px 0",
 
-                      fontSize:
-                        "16px",
-
-                      lineHeight:
-                        "1.8",
+                      fontSize: "20px",
 
                     }}
                   >
+                    運行記録
+                  </h3>
 
-                    <h3
-                      style={{
+                  <div>
 
-                        margin:
-                          "0 0 10px 0",
+                    <strong>
+                      ルート：
+                    </strong>
 
-                        fontSize:
-                          "20px",
+                    {(() => {
 
-                      }}
-                    >
+                      const routeType =
+                        String(record.routeType)
+                          .trim()
+                          .toUpperCase();
 
-                      運行記録
-
-                    </h3>
-
-
-                    <div>
-
-                      <strong>
-                        ルート：
-                      </strong>
-
-                      {
-                        record.routeType
+                      if (
+                        routeType === "ORANGE" ||
+                        routeType === "BLUE" ||
+                        routeType === "CIRCULATION"
+                      ) {
+                        return "循環ルート";
                       }
 
-                    </div>
-
-
-                    <div>
-
-                      <strong>
-                        人数変化：
-                      </strong>
-
-                      {
-                        record.passengerChange
+                      if (routeType === "FREE") {
+                        return "フリー運行";
                       }
 
-                    </div>
-
-
-                    <div>
-
-                      <strong>
-
-                        {
-                          record.passengerChange >
-                          0
-                            ? "乗車人数"
-                            : "降車人数"
-                        }
-
-                        ：
-
-                      </strong>
-
-                      {
-                        Math.abs(
-                          record.passengerChange
-                        )
+                      if (routeType === "MORNING_ACTIVITY") {
+                        return "朝活運行";
                       }
 
-                    </div>
+                      return record.routeType;
 
-
-                    <div>
-
-                      <strong>
-                        乗車人数：
-                      </strong>
-
-                      {
-                        record.passengerCount
-                      }
-
-                    </div>
-
-
-                    <div>
-
-                      <strong>
-                        時刻：
-                      </strong>
-
-                      {
-                        record.time
-                      }
-
-                    </div>
+                    })()}
 
                   </div>
 
-                </Popup>
+                  <div>
 
-              </Marker>
+                    <strong>
+                      人数変化：
+                    </strong>
 
-            )
+                    {record.passengerChange}
 
-          )
+                  </div>
+
+                  <div>
+
+                    <strong>
+
+                      {record.passengerChange > 0
+                        ? "乗車人数"
+                        : "降車人数"}
+
+                      ：
+
+                    </strong>
+
+                    {Math.abs(record.passengerChange)}
+
+                  </div>
+
+                  <div>
+
+                    <strong>
+                      乗車人数：
+                    </strong>
+
+                    {record.passengerCount}
+
+                  </div>
+
+                  <div>
+
+                    <strong>
+                      時刻：
+                    </strong>
+
+                    {record.time}
+
+                  </div>
+
+                </div>
+
+              </Popup>
+
+            </Marker>
+
+          ))
         }
-
 
         {/* ====================================================
             月ごとの集約ピン
@@ -1625,179 +1184,134 @@ export default function Map({
 
         {periodMode === "month" &&
 
-          monthlyClusters.map(
-            (cluster) => (
+          monthlyClusters.map((cluster) => (
 
-              <Marker
+            <Marker
 
-                key={
-                  cluster.id
-                }
+              key={cluster.id}
 
-                position={[
+              position={[
+                cluster.latitude,
+                cluster.longitude,
+              ]}
 
-                  cluster.latitude,
+              icon={createMonthlyPassengerIcon(
+                cluster.totalPassenger
+              )}
 
-                  cluster.longitude,
+            >
 
-                ]}
+              <Popup>
 
-                icon={
-                  createMonthlyPassengerIcon(
-                    cluster.totalPassenger
-                  )
-                }
+                <div
+                  style={{
 
-              >
+                    minWidth: "230px",
 
-                <Popup>
+                    fontSize: "16px",
+
+                    lineHeight: "1.8",
+
+                  }}
+                >
+
+                  <h3
+                    style={{
+
+                      margin: "0 0 10px 0",
+
+                      fontSize: "20px",
+
+                    }}
+                  >
+                    月間利用状況
+                  </h3>
+
+                  <div>
+
+                    <strong>
+                      合計人数：
+                    </strong>
+
+                    {cluster.totalPassenger}
+
+                    人
+
+                  </div>
+
+                  <div>
+
+                    <strong>
+                      記録件数：
+                    </strong>
+
+                    {cluster.recordCount}
+
+                    件
+
+                  </div>
+
+                  <div>
+
+                    <strong>
+                      ルート：
+                    </strong>
+
+                    {cluster.routeTypes
+                      .map((route) => {
+
+                        if (
+                          route === "ORANGE" ||
+                          route === "BLUE" ||
+                          route === "CIRCULATION"
+                        ) {
+                          return "循環ルート";
+                        }
+
+                        if (route === "FREE") {
+                          return "フリー運行";
+                        }
+
+                        if (route === "MORNING_ACTIVITY") {
+                          return "朝活運行";
+                        }
+
+                        return route;
+
+                      })
+                      .filter(
+                        (route, index, array) =>
+                          array.indexOf(route) === index
+                      )
+                      .join("、")}
+
+                  </div>
 
                   <div
                     style={{
 
-                      minWidth:
-                        "230px",
+                      marginTop: "8px",
 
-                      fontSize:
-                        "16px",
+                      fontSize: "12px",
 
-                      lineHeight:
-                        "1.8",
+                      color: "#666",
 
                     }}
                   >
 
-                    <h3
-                      style={{
-
-                        margin:
-                          "0 0 10px 0",
-
-                        fontSize:
-                          "20px",
-
-                      }}
-                    >
-
-                      月間利用状況
-
-                    </h3>
-
-
-                    <div>
-
-                      <strong>
-                        合計人数：
-                      </strong>
-
-                      {
-                        cluster.totalPassenger
-                      }
-
-                      人
-
-                    </div>
-
-
-                    <div>
-
-                      <strong>
-                        記録件数：
-                      </strong>
-
-                      {
-                        cluster.recordCount
-                      }
-
-                      件
-
-                    </div>
-
-
-                    <div>
-
-                      <strong>
-                        ルート：
-                      </strong>
-
-                      {
-                        cluster.routeTypes
-                          .map(
-                            (route) => {
-
-                              if (
-                                route ===
-                                "ORANGE"
-                              ) {
-
-                                return "オレンジ";
-
-                              }
-
-
-                              if (
-                                route ===
-                                "BLUE"
-                              ) {
-
-                                return "ブルー";
-
-                              }
-
-
-                              if (
-                                route ===
-                                "FREE"
-                              ) {
-
-                                return "Free";
-
-                              }
-
-
-                              return route;
-
-                            }
-                          )
-                          .join(
-                            "、"
-                          )
-                      }
-
-                    </div>
-
-
-                    <div
-                      style={{
-
-                        marginTop:
-                          "8px",
-
-                        fontSize:
-                          "12px",
-
-                        color:
-                          "#666",
-
-                      }}
-                    >
-
-                      50m以内の記録を
-                      1つにまとめています
-
-                    </div>
+                    50m以内の記録を
+                    1つにまとめています
 
                   </div>
 
-                </Popup>
+                </div>
 
-              </Marker>
+              </Popup>
 
-            )
+            </Marker>
 
-          )
+          ))
         }
-
 
         {/* ====================================================
             協賛施設マーカー
@@ -1808,20 +1322,13 @@ export default function Map({
           <Marker
 
             position={[
-
               selectedFacility.latitude,
-
               selectedFacility.longitude,
-
             ]}
 
-            icon={
-              createFacilityIcon()
-            }
+            icon={createFacilityIcon()}
 
-            zIndexOffset={
-              1000
-            }
+            zIndexOffset={1000}
 
           >
 
@@ -1830,14 +1337,11 @@ export default function Map({
               <div
                 style={{
 
-                  minWidth:
-                    "220px",
+                  minWidth: "220px",
 
-                  fontSize:
-                    "16px",
+                  fontSize: "16px",
 
-                  lineHeight:
-                    "1.7",
+                  lineHeight: "1.7",
 
                 }}
               >
@@ -1845,19 +1349,14 @@ export default function Map({
                 <h3
                   style={{
 
-                    margin:
-                      "0 0 8px 0",
+                    margin: "0 0 8px 0",
 
-                    fontSize:
-                      "18px",
+                    fontSize: "18px",
 
                   }}
                 >
-
                   協賛施設
-
                 </h3>
-
 
                 <div>
 
@@ -1867,30 +1366,22 @@ export default function Map({
 
                   <br />
 
-                  {
-                    selectedFacility.name
-                  }
+                  {selectedFacility.name}
 
                 </div>
-
 
                 <div
                   style={{
 
-                    marginTop:
-                      "8px",
+                    marginTop: "8px",
 
-                    fontSize:
-                      "12px",
+                    fontSize: "12px",
 
-                    color:
-                      "#666",
+                    color: "#666",
 
                   }}
                 >
-
                   選択した協賛施設
-
                 </div>
 
               </div>
@@ -1903,7 +1394,6 @@ export default function Map({
 
       </MapContainer>
 
-
       {/* ======================================================
           ルート読み込み中
           ====================================================== */}
@@ -1913,32 +1403,23 @@ export default function Map({
         <div
           style={{
 
-            position:
-              "absolute",
+            position: "absolute",
 
-            bottom:
-              "20px",
+            bottom: "20px",
 
-            left:
-              "20px",
+            left: "20px",
 
-            zIndex:
-              1000,
+            zIndex: 1000,
 
-            background:
-              "rgba(255,255,255,0.95)",
+            background: "rgba(255,255,255,0.95)",
 
-            padding:
-              "10px 14px",
+            padding: "10px 14px",
 
-            borderRadius:
-              "8px",
+            borderRadius: "8px",
 
-            boxShadow:
-              "0 2px 8px rgba(0,0,0,0.2)",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
 
-            fontSize:
-              "13px",
+            fontSize: "13px",
 
           }}
         >
@@ -1950,7 +1431,6 @@ export default function Map({
 
       )}
 
-
       {/* ======================================================
           ルート読み込みエラー
           ====================================================== */}
@@ -1960,205 +1440,141 @@ export default function Map({
         <div
           style={{
 
-            position:
-              "absolute",
+            position: "absolute",
 
-            bottom:
-              "20px",
+            bottom: "20px",
 
-            left:
-              "20px",
+            left: "20px",
 
-            zIndex:
-              1000,
+            zIndex: 1000,
 
-            background:
-              "rgba(255,235,238,0.96)",
+            background: "rgba(255,235,238,0.96)",
 
-            color:
-              "#c62828",
+            color: "#c62828",
 
-            padding:
-              "10px 14px",
+            padding: "10px 14px",
 
-            borderRadius:
-              "8px",
+            borderRadius: "8px",
 
-            boxShadow:
-              "0 2px 8px rgba(0,0,0,0.2)",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
 
-            fontSize:
-              "13px",
+            fontSize: "13px",
 
           }}
         >
 
-          {
-            routeError
-          }
+          {routeError}
 
         </div>
 
       )}
 
-
       {/* ======================================================
           ルート凡例
+
+          選択中の運行形態に関係なく、
+          両方のルートを常に表示する
           ====================================================== */}
 
-      {selectedRoute !==
-        "FREE" && (
+      <div
+        style={{
+
+          position: "absolute",
+
+          bottom: "20px",
+
+          left: "20px",
+
+          zIndex: 1000,
+
+          background: "rgba(255,255,255,0.95)",
+
+          padding: "12px 15px",
+
+          borderRadius: "10px",
+
+          boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+
+          fontSize: "14px",
+
+        }}
+      >
+
+        {/* オレンジ */}
 
         <div
           style={{
 
-            position:
-              "absolute",
+            display: "flex",
 
-            bottom:
-              "20px",
+            alignItems: "center",
 
-            left:
-              "20px",
+            gap: "8px",
 
-            zIndex:
-              1000,
-
-            background:
-              "rgba(255,255,255,0.95)",
-
-            padding:
-              "12px 15px",
-
-            borderRadius:
-              "10px",
-
-            boxShadow:
-              "0 2px 8px rgba(0,0,0,0.25)",
-
-            fontSize:
-              "14px",
+            marginBottom: "7px",
 
           }}
         >
 
+          <span
+            style={{
 
-          {/* オレンジ */}
+              display: "inline-block",
 
-          {(
-            selectedRoute ===
-              "ALL" ||
-            selectedRoute ===
-              "ORANGE"
-          ) && (
+              width: "28px",
 
-            <div
-              style={{
+              height: "6px",
 
-                display:
-                  "flex",
+              background: "#ff6600",
 
-                alignItems:
-                  "center",
+              borderRadius: "5px",
 
-                gap:
-                  "8px",
+            }}
+          />
 
-                marginBottom:
-                  selectedRoute ===
-                  "ALL"
-                    ? "7px"
-                    : "0",
-
-              }}
-            >
-
-              <span
-                style={{
-
-                  display:
-                    "inline-block",
-
-                  width:
-                    "28px",
-
-                  height:
-                    "6px",
-
-                  background:
-                    "#ff6600",
-
-                  borderRadius:
-                    "5px",
-
-                }}
-              />
-
-              <span>
-                オレンジルート
-              </span>
-
-            </div>
-
-          )}
-
-
-          {/* ブルー */}
-
-          {(
-            selectedRoute ===
-              "ALL" ||
-            selectedRoute ===
-              "BLUE"
-          ) && (
-
-            <div
-              style={{
-
-                display:
-                  "flex",
-
-                alignItems:
-                  "center",
-
-                gap:
-                  "8px",
-
-              }}
-            >
-
-              <span
-                style={{
-
-                  display:
-                    "inline-block",
-
-                  width:
-                    "28px",
-
-                  height:
-                    "6px",
-
-                  background:
-                    "#2979ff",
-
-                  borderRadius:
-                    "5px",
-
-                }}
-              />
-
-              <span>
-                ブルールート
-              </span>
-
-            </div>
-
-          )}
+          <span>
+            オレンジルート
+          </span>
 
         </div>
 
-      )}
+        {/* ブルー */}
+
+        <div
+          style={{
+
+            display: "flex",
+
+            alignItems: "center",
+
+            gap: "8px",
+
+          }}
+        >
+
+          <span
+            style={{
+
+              display: "inline-block",
+
+              width: "28px",
+
+              height: "6px",
+
+              background: "#2979ff",
+
+              borderRadius: "5px",
+
+            }}
+          />
+
+          <span>
+            ブルールート
+          </span>
+
+        </div>
+
+      </div>
 
     </div>
 

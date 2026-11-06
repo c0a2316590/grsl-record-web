@@ -1,20 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
 import {
   collection,
   getDocs,
   Timestamp,
 } from "firebase/firestore";
-
 import { signInAnonymously } from "firebase/auth";
-
-import {
-  db,
-  auth,
-} from "@/lib/firebase";
-
+import { db, auth } from "@/lib/firebase";
 import dynamic from "next/dynamic";
 
 const Map = dynamic(() => import("./Map"), {
@@ -39,17 +32,13 @@ type OperationRecord = {
    乗車 / 降車
    ======================================== */
 
-type DisplayMode =
-  | "boarding"
-  | "alighting";
+type DisplayMode = "boarding" | "alighting";
 
 /* ========================================
    日ごと / 月ごと
    ======================================== */
 
-type PeriodMode =
-  | "day"
-  | "month";
+type PeriodMode = "day" | "month";
 
 /* ========================================
    ルート
@@ -57,9 +46,9 @@ type PeriodMode =
 
 type RouteFilter =
   | "ALL"
-  | "ORANGE"
-  | "BLUE"
-  | "FREE";
+  | "FREE"
+  | "CIRCULATION"
+  | "MORNING_ACTIVITY";
 
 /* ========================================
    協賛施設
@@ -144,24 +133,18 @@ const findLatestRecordedDate =
       offset <= 366;
       offset++
     ) {
-      const checkDate =
-        new Date(today);
+      const checkDate = new Date(today);
 
       checkDate.setDate(
         today.getDate() - offset
       );
 
-      const dateString =
-        formatDate(checkDate);
+      const dateString = formatDate(checkDate);
 
       try {
-        const snapshot =
-          await getDocs(
-            collection(
-              db,
-              dateString
-            )
-          );
+        const snapshot = await getDocs(
+          collection(db, dateString)
+        );
 
         if (snapshot.empty) {
           continue;
@@ -171,31 +154,26 @@ const findLatestRecordedDate =
          * 有効な運行記録が1件でも
          * 入っているか確認
          */
-        let hasValidRecord =
-          false;
+        let hasValidRecord = false;
 
-        snapshot.forEach(
-          (document) => {
-            const record =
-              document.data();
+        snapshot.forEach((document) => {
+          const record = document.data();
 
-            if (
-              record.latitude !== undefined &&
-              record.longitude !== undefined &&
-              record.passengerChange !== undefined &&
-              record.passengerCount !== undefined &&
-              record.routeType !== undefined &&
-              record.time !== undefined
-            ) {
-              hasValidRecord = true;
-            }
+          if (
+            record.latitude !== undefined &&
+            record.longitude !== undefined &&
+            record.passengerChange !== undefined &&
+            record.passengerCount !== undefined &&
+            record.routeType !== undefined &&
+            record.time !== undefined
+          ) {
+            hasValidRecord = true;
           }
-        );
+        });
 
         if (hasValidRecord) {
           return dateString;
         }
-
       } catch {
         console.log(
           `${dateString} は取得できません`
@@ -214,7 +192,6 @@ export default function Home() {
 
   /* ========================================
      表示期間
-
      最初は「月ごと」
      ======================================== */
 
@@ -319,7 +296,6 @@ export default function Home() {
 
   /* ========================================
      初期化
-
      最新の記録がある日を探す
      ======================================== */
 
@@ -328,7 +304,6 @@ export default function Home() {
     const initialize = async () => {
 
       try {
-
         setLoading(true);
         setError("");
 
@@ -352,14 +327,9 @@ export default function Home() {
           /*
            * 記録が1件もない場合
            */
-          const today =
-            formatDate(
-              new Date()
-            );
+          const today = formatDate(new Date());
 
-          setSelectedDate(
-            today
-          );
+          setSelectedDate(today);
 
           setSelectedMonth(
             today.substring(0, 7)
@@ -374,17 +344,13 @@ export default function Home() {
            最新日を保存
            ============================== */
 
-        setLatestRecordedDate(
-          latestDate
-        );
+        setLatestRecordedDate(latestDate);
 
         /* ==============================
            最新日を選択
            ============================== */
 
-        setSelectedDate(
-          latestDate
-        );
+        setSelectedDate(latestDate);
 
         /* ==============================
            最新日が含まれる月を選択
@@ -399,9 +365,7 @@ export default function Home() {
          * 最新月が表示される
          */
 
-        setPeriodMode(
-          "month"
-        );
+        setPeriodMode("month");
 
         setInitialized(true);
 
@@ -417,9 +381,7 @@ export default function Home() {
         );
 
       } finally {
-
         setLoading(false);
-
       }
     };
 
@@ -460,47 +422,121 @@ export default function Home() {
       return;
     }
 
-    const fetchRecords =
-      async () => {
+    const fetchRecords = async () => {
 
-        setLoading(true);
-        setError("");
-        setRecords([]);
+      setLoading(true);
+      setError("");
+      setRecords([]);
 
-        try {
+      try {
 
-          /* ==============================
-             Firebase Authentication
-             ============================== */
+        /* ==============================
+           Firebase Authentication
+           ============================== */
 
-          if (!auth.currentUser) {
-            await signInAnonymously(auth);
-          }
+        if (!auth.currentUser) {
+          await signInAnonymously(auth);
+        }
 
-          const fetchedRecords:
-            OperationRecord[] = [];
+        const fetchedRecords: OperationRecord[] = [];
 
-          /* ==============================
-             日ごとの表示
-             ============================== */
+        /* ==============================
+           日ごとの表示
+           ============================== */
 
-          if (
-            periodMode === "day"
+        if (periodMode === "day") {
+
+          const snapshot = await getDocs(
+            collection(db, selectedDate)
+          );
+
+          snapshot.forEach((document) => {
+
+            const record = document.data();
+
+            if (
+              record.latitude !== undefined &&
+              record.longitude !== undefined &&
+              record.passengerChange !== undefined &&
+              record.passengerCount !== undefined &&
+              record.routeType !== undefined &&
+              record.time !== undefined
+            ) {
+
+              fetchedRecords.push({
+
+                id: `${selectedDate}_${document.id}`,
+
+                latitude: Number(record.latitude),
+
+                longitude: Number(record.longitude),
+
+                passengerChange: Number(
+                  record.passengerChange
+                ),
+
+                passengerCount: Number(
+                  record.passengerCount
+                ),
+
+                routeType: String(record.routeType),
+
+                time: record.time,
+
+              });
+            }
+          });
+
+        }
+
+        /* ==============================
+           月ごとの表示
+           ============================== */
+
+        else {
+
+          const [year, month] =
+            selectedMonth.split("-");
+
+          const yearNumber = Number(year);
+          const monthNumber = Number(month);
+
+          /*
+           * その月の日数
+           */
+          const daysInMonth = new Date(
+            yearNumber,
+            monthNumber,
+            0
+          ).getDate();
+
+          /*
+           * 月内の全日付コレクションを取得
+           */
+
+          for (
+            let day = 1;
+            day <= daysInMonth;
+            day++
           ) {
 
-            const snapshot =
-              await getDocs(
-                collection(
-                  db,
-                  selectedDate
-                )
+            const dayString = String(day).padStart(
+              2,
+              "0"
+            );
+
+            const collectionName =
+              `${year}-${month}-${dayString}`;
+
+            try {
+
+              const snapshot = await getDocs(
+                collection(db, collectionName)
               );
 
-            snapshot.forEach(
-              (document) => {
+              snapshot.forEach((document) => {
 
-                const record =
-                  document.data();
+                const record = document.data();
 
                 if (
                   record.latitude !== undefined &&
@@ -513,200 +549,60 @@ export default function Home() {
 
                   fetchedRecords.push({
 
-                    id:
-                      `${selectedDate}_${document.id}`,
+                    id: `${collectionName}_${document.id}`,
 
-                    latitude:
-                      Number(
-                        record.latitude
-                      ),
+                    latitude: Number(record.latitude),
 
-                    longitude:
-                      Number(
-                        record.longitude
-                      ),
+                    longitude: Number(record.longitude),
 
-                    passengerChange:
-                      Number(
-                        record.passengerChange
-                      ),
+                    passengerChange: Number(
+                      record.passengerChange
+                    ),
 
-                    passengerCount:
-                      Number(
-                        record.passengerCount
-                      ),
+                    passengerCount: Number(
+                      record.passengerCount
+                    ),
 
-                    routeType:
-                      String(
-                        record.routeType
-                      ),
+                    routeType: String(record.routeType),
 
-                    time:
-                      record.time,
+                    time: record.time,
 
                   });
-
                 }
+              });
 
-              }
-            );
+            } catch {
 
-          }
-
-          /* ==============================
-             月ごとの表示
-             ============================== */
-
-          else {
-
-            const [
-              year,
-              month,
-            ] =
-              selectedMonth.split(
-                "-"
+              console.log(
+                `${collectionName} は取得できません`
               );
 
-            const yearNumber =
-              Number(year);
-
-            const monthNumber =
-              Number(month);
-
-            /*
-             * その月の日数
-             */
-            const daysInMonth =
-              new Date(
-                yearNumber,
-                monthNumber,
-                0
-              ).getDate();
-
-            /*
-             * 月内の全日付コレクションを取得
-             */
-
-            for (
-              let day = 1;
-              day <= daysInMonth;
-              day++
-            ) {
-
-              const dayString =
-                String(day)
-                  .padStart(
-                    2,
-                    "0"
-                  );
-
-              const collectionName =
-                `${year}-${month}-${dayString}`;
-
-              try {
-
-                const snapshot =
-                  await getDocs(
-                    collection(
-                      db,
-                      collectionName
-                    )
-                  );
-
-                snapshot.forEach(
-                  (document) => {
-
-                    const record =
-                      document.data();
-
-                    if (
-                      record.latitude !== undefined &&
-                      record.longitude !== undefined &&
-                      record.passengerChange !== undefined &&
-                      record.passengerCount !== undefined &&
-                      record.routeType !== undefined &&
-                      record.time !== undefined
-                    ) {
-
-                      fetchedRecords.push({
-
-                        id:
-                          `${collectionName}_${document.id}`,
-
-                        latitude:
-                          Number(
-                            record.latitude
-                          ),
-
-                        longitude:
-                          Number(
-                            record.longitude
-                          ),
-
-                        passengerChange:
-                          Number(
-                            record.passengerChange
-                          ),
-
-                        passengerCount:
-                          Number(
-                            record.passengerCount
-                          ),
-
-                        routeType:
-                          String(
-                            record.routeType
-                          ),
-
-                        time:
-                          record.time,
-
-                      });
-
-                    }
-
-                  }
-                );
-
-              } catch {
-
-                console.log(
-                  `${collectionName} は取得できません`
-                );
-
-              }
-
             }
-
           }
-
-          console.log(
-            "取得した運行記録:",
-            fetchedRecords
-          );
-
-          setRecords(
-            fetchedRecords
-          );
-
-        } catch (err) {
-
-          console.error(
-            "Firestoreエラー:",
-            err
-          );
-
-          setError(
-            "Firestoreからデータを取得できませんでした。"
-          );
-
-        } finally {
-
-          setLoading(false);
-
         }
 
-      };
+        console.log(
+          "取得した運行記録:",
+          fetchedRecords
+        );
+
+        setRecords(fetchedRecords);
+
+      } catch (err) {
+
+        console.error(
+          "Firestoreエラー:",
+          err
+        );
+
+        setError(
+          "Firestoreからデータを取得できませんでした。"
+        );
+
+      } finally {
+        setLoading(false);
+      }
+    };
 
     fetchRecords();
 
@@ -723,28 +619,20 @@ export default function Home() {
 
   const routes = [
     {
-      value:
-        "ALL" as RouteFilter,
-      label:
-        "すべて",
+      value: "ALL" as RouteFilter,
+      label: "すべて",
     },
     {
-      value:
-        "ORANGE" as RouteFilter,
-      label:
-        "オレンジ",
+      value: "FREE" as RouteFilter,
+      label: "フリー運行",
     },
     {
-      value:
-        "BLUE" as RouteFilter,
-      label:
-        "ブルー",
+      value: "CIRCULATION" as RouteFilter,
+      label: "循環ルート",
     },
     {
-      value:
-        "FREE" as RouteFilter,
-      label:
-        "Free",
+      value: "MORNING_ACTIVITY" as RouteFilter,
+      label: "朝活運行",
     },
   ];
 
@@ -753,198 +641,119 @@ export default function Home() {
      ======================================== */
 
   const modeFilteredRecords =
-    records.filter(
-      (record) => {
+    records.filter((record) => {
 
-        if (
-          displayMode ===
-          "boarding"
-        ) {
-
-          return (
-            record.passengerChange >
-            0
-          );
-
-        }
-
-        return (
-          record.passengerChange <
-          0
-        );
-
+      if (displayMode === "boarding") {
+        return record.passengerChange > 0;
       }
-    );
+
+      return record.passengerChange < 0;
+
+    });
 
   /* ========================================
      ルートで絞り込み
      ======================================== */
 
   const routeFilteredRecords =
-    modeFilteredRecords.filter(
-      (record) => {
+    modeFilteredRecords.filter((record) => {
 
-        const routeType =
-          String(
-            record.routeType
-          )
-            .trim()
-            .toUpperCase();
+      const routeType = String(record.routeType)
+        .trim()
+        .toUpperCase();
 
-        if (
-          selectedRoute ===
-          "ALL"
-        ) {
-
-          return true;
-
-        }
-
-        if (
-          selectedRoute ===
-          "ORANGE"
-        ) {
-
-          return (
-            routeType ===
-            "ORANGE"
-          );
-
-        }
-
-        if (
-          selectedRoute ===
-          "BLUE"
-        ) {
-
-          return (
-            routeType ===
-            "BLUE"
-          );
-
-        }
-
-        if (
-          selectedRoute ===
-          "FREE"
-        ) {
-
-          return (
-            routeType ===
-            "FREE"
-          );
-
-        }
-
-        return false;
-
+      if (selectedRoute === "ALL") {
+        return true;
       }
-    );
+
+      if (selectedRoute === "FREE") {
+        return routeType === "FREE";
+      }
+
+      if (selectedRoute === "CIRCULATION") {
+        return (
+          routeType === "CIRCULATION" ||
+          routeType === "ORANGE" ||
+          routeType === "BLUE"
+        );
+      }
+
+      if (selectedRoute === "MORNING_ACTIVITY") {
+        return routeType === "MORNING_ACTIVITY";
+      }
+
+      return false;
+
+    });
 
   /* ========================================
      時間帯で絞り込み
      ======================================== */
 
   const filteredRecords =
-    routeFilteredRecords.filter(
-      (record) => {
+    routeFilteredRecords.filter((record) => {
 
-        if (
-          !useTimeFilter
-        ) {
-
-          return true;
-
-        }
-
-        const date =
-          record.time.toDate();
-
-        const recordMinutes =
-          date.getHours() * 60 +
-          date.getMinutes();
-
-        const [
-          startHour,
-          startMinute,
-        ] =
-          appliedStartTime
-            .split(":")
-            .map(Number);
-
-        const [
-          endHour,
-          endMinute,
-        ] =
-          appliedEndTime
-            .split(":")
-            .map(Number);
-
-        const startMinutes =
-          startHour * 60 +
-          startMinute;
-
-        const endMinutes =
-          endHour * 60 +
-          endMinute;
-
-        /*
-         * 通常の時間帯
-         *
-         * 例：
-         * 09:00 ～ 17:00
-         */
-
-        if (
-          startMinutes <=
-          endMinutes
-        ) {
-
-          return (
-            recordMinutes >=
-              startMinutes &&
-            recordMinutes <=
-              endMinutes
-          );
-
-        }
-
-        /*
-         * 日付をまたぐ時間帯
-         *
-         * 例：
-         * 22:00 ～ 02:00
-         */
-
-        return (
-          recordMinutes >=
-            startMinutes ||
-          recordMinutes <=
-            endMinutes
-        );
-
+      if (!useTimeFilter) {
+        return true;
       }
-    );
+
+      const date = record.time.toDate();
+
+      const recordMinutes =
+        date.getHours() * 60 +
+        date.getMinutes();
+
+      const [startHour, startMinute] =
+        appliedStartTime.split(":").map(Number);
+
+      const [endHour, endMinute] =
+        appliedEndTime.split(":").map(Number);
+
+      const startMinutes =
+        startHour * 60 + startMinute;
+
+      const endMinutes =
+        endHour * 60 + endMinute;
+
+      /*
+       * 通常の時間帯
+       * 例：09:00 ～ 17:00
+       */
+
+      if (startMinutes <= endMinutes) {
+        return (
+          recordMinutes >= startMinutes &&
+          recordMinutes <= endMinutes
+        );
+      }
+
+      /*
+       * 日付をまたぐ時間帯
+       * 例：22:00 ～ 02:00
+       */
+
+      return (
+        recordMinutes >= startMinutes ||
+        recordMinutes <= endMinutes
+      );
+
+    });
 
   /* ========================================
      Mapに渡すデータ
      ======================================== */
 
-  const mapRecords =
-    filteredRecords.map(
-      (record) => ({
+  const mapRecords = filteredRecords.map(
+    (record) => ({
 
-        ...record,
+      ...record,
 
-        time:
-          record.time
-            .toDate()
-            .toLocaleString(
-              "ja-JP"
-            ),
+      time: record.time
+        .toDate()
+        .toLocaleString("ja-JP"),
 
-      })
-    );
+    })
+  );
 
   /* ========================================
      選択されている協賛施設
@@ -953,8 +762,7 @@ export default function Home() {
   const selectedFacilityData =
     sponsorFacilities.find(
       (facility) =>
-        facility.id ===
-        selectedFacility
+        facility.id === selectedFacility
     ) ?? null;
 
   /* ========================================
@@ -964,60 +772,36 @@ export default function Home() {
   const selectedRouteLabel =
     routes.find(
       (route) =>
-        route.value ===
-        selectedRoute
-    )?.label ??
-    "すべて";
+        route.value === selectedRoute
+    )?.label ?? "すべて";
 
   /* ========================================
      時間フィルター適用
      ======================================== */
 
-  const applyTimeFilter =
-    () => {
+  const applyTimeFilter = () => {
 
-      setAppliedStartTime(
-        startTime
-      );
+    setAppliedStartTime(startTime);
+    setAppliedEndTime(endTime);
+    setUseTimeFilter(true);
 
-      setAppliedEndTime(
-        endTime
-      );
-
-      setUseTimeFilter(
-        true
-      );
-
-    };
+  };
 
   /* ========================================
      時間フィルター解除
      ======================================== */
 
-  const clearTimeFilter =
-    () => {
+  const clearTimeFilter = () => {
 
-      setUseTimeFilter(
-        false
-      );
+    setUseTimeFilter(false);
 
-      setStartTime(
-        "00:00"
-      );
+    setStartTime("00:00");
+    setEndTime("23:59");
 
-      setEndTime(
-        "23:59"
-      );
+    setAppliedStartTime("00:00");
+    setAppliedEndTime("23:59");
 
-      setAppliedStartTime(
-        "00:00"
-      );
-
-      setAppliedEndTime(
-        "23:59"
-      );
-
-    };
+  };
 
   /* ========================================
      読み込み画面
@@ -1076,15 +860,9 @@ export default function Home() {
 
         <Map
           records={mapRecords}
-          selectedRoute={
-            selectedRoute
-          }
-          periodMode={
-            periodMode
-          }
-          selectedFacility={
-            selectedFacilityData
-          }
+          selectedRoute={selectedRoute}
+          periodMode={periodMode}
+          selectedFacility={selectedFacilityData}
         />
 
       </div>
@@ -1097,11 +875,7 @@ export default function Home() {
 
         <button
           className="panel-toggle-button minimized"
-          onClick={() =>
-            setIsPanelMinimized(
-              false
-            )
-          }
+          onClick={() => setIsPanelMinimized(false)}
           aria-label="操作パネルを開く"
           title="操作パネルを開く"
         >
@@ -1128,11 +902,7 @@ export default function Home() {
 
             <button
               className="panel-toggle-button"
-              onClick={() =>
-                setIsPanelMinimized(
-                  true
-                )
-              }
+              onClick={() => setIsPanelMinimized(true)}
               aria-label="操作パネルを最小化"
               title="操作パネルを最小化"
             >
@@ -1155,28 +925,19 @@ export default function Home() {
 
               <button
                 className={
-                  periodMode ===
-                  "day"
+                  periodMode === "day"
                     ? "period-button active"
                     : "period-button"
                 }
                 onClick={() => {
 
-                  setPeriodMode(
-                    "day"
-                  );
+                  setPeriodMode("day");
 
                   /*
                    * 最新の記録日を表示
                    */
-                  if (
-                    latestRecordedDate
-                  ) {
-
-                    setSelectedDate(
-                      latestRecordedDate
-                    );
-
+                  if (latestRecordedDate) {
+                    setSelectedDate(latestRecordedDate);
                   }
 
                 }}
@@ -1186,31 +947,21 @@ export default function Home() {
 
               <button
                 className={
-                  periodMode ===
-                  "month"
+                  periodMode === "month"
                     ? "period-button active"
                     : "period-button"
                 }
                 onClick={() => {
 
-                  setPeriodMode(
-                    "month"
-                  );
+                  setPeriodMode("month");
 
                   /*
                    * 最新の記録がある月を表示
                    */
-                  if (
-                    latestRecordedDate
-                  ) {
-
+                  if (latestRecordedDate) {
                     setSelectedMonth(
-                      latestRecordedDate.substring(
-                        0,
-                        7
-                      )
+                      latestRecordedDate.substring(0, 7)
                     );
-
                   }
 
                 }}
@@ -1226,8 +977,7 @@ export default function Home() {
               日付 / 月
               ================================== */}
 
-          {periodMode ===
-          "day" ? (
+          {periodMode === "day" ? (
 
             <div className="date-section">
 
@@ -1238,13 +988,9 @@ export default function Home() {
               <input
                 id="date"
                 type="date"
-                value={
-                  selectedDate
-                }
+                value={selectedDate}
                 onChange={(e) =>
-                  setSelectedDate(
-                    e.target.value
-                  )
+                  setSelectedDate(e.target.value)
                 }
               />
 
@@ -1261,13 +1007,9 @@ export default function Home() {
               <input
                 id="month"
                 type="month"
-                value={
-                  selectedMonth
-                }
+                value={selectedMonth}
                 onChange={(e) =>
-                  setSelectedMonth(
-                    e.target.value
-                  )
+                  setSelectedMonth(e.target.value)
                 }
               />
 
@@ -1287,9 +1029,7 @@ export default function Home() {
 
             <select
               id="route"
-              value={
-                selectedRoute
-              }
+              value={selectedRoute}
               onChange={(e) =>
                 setSelectedRoute(
                   e.target.value as RouteFilter
@@ -1297,24 +1037,16 @@ export default function Home() {
               }
             >
 
-              {routes.map(
-                (route) => (
+              {routes.map((route) => (
 
-                  <option
-                    key={
-                      route.value
-                    }
-                    value={
-                      route.value
-                    }
-                  >
-                    {
-                      route.label
-                    }
-                  </option>
+                <option
+                  key={route.value}
+                  value={route.value}
+                >
+                  {route.label}
+                </option>
 
-                )
-              )}
+              ))}
 
             </select>
 
@@ -1332,13 +1064,9 @@ export default function Home() {
 
             <select
               id="facility"
-              value={
-                selectedFacility
-              }
+              value={selectedFacility}
               onChange={(e) =>
-                setSelectedFacility(
-                  e.target.value
-                )
+                setSelectedFacility(e.target.value)
               }
             >
 
@@ -1346,24 +1074,16 @@ export default function Home() {
                 選択なし
               </option>
 
-              {sponsorFacilities.map(
-                (facility) => (
+              {sponsorFacilities.map((facility) => (
 
-                  <option
-                    key={
-                      facility.id
-                    }
-                    value={
-                      facility.id
-                    }
-                  >
-                    {
-                      facility.name
-                    }
-                  </option>
+                <option
+                  key={facility.id}
+                  value={facility.id}
+                >
+                  {facility.name}
+                </option>
 
-                )
-              )}
+              ))}
 
             </select>
 
@@ -1374,9 +1094,7 @@ export default function Home() {
                 選択中：
                 <br />
 
-                {
-                  selectedFacilityData.name
-                }
+                {selectedFacilityData.name}
 
               </div>
 
@@ -1400,9 +1118,7 @@ export default function Home() {
                   ? "time-all-button active"
                   : "time-all-button"
               }
-              onClick={
-                clearTimeFilter
-              }
+              onClick={clearTimeFilter}
             >
               すべて
             </button>
@@ -1411,13 +1127,9 @@ export default function Home() {
 
               <input
                 type="time"
-                value={
-                  startTime
-                }
+                value={startTime}
                 onChange={(e) =>
-                  setStartTime(
-                    e.target.value
-                  )
+                  setStartTime(e.target.value)
                 }
               />
 
@@ -1427,13 +1139,9 @@ export default function Home() {
 
               <input
                 type="time"
-                value={
-                  endTime
-                }
+                value={endTime}
                 onChange={(e) =>
-                  setEndTime(
-                    e.target.value
-                  )
+                  setEndTime(e.target.value)
                 }
               />
 
@@ -1441,9 +1149,7 @@ export default function Home() {
 
             <button
               className="time-apply-button"
-              onClick={
-                applyTimeFilter
-              }
+              onClick={applyTimeFilter}
             >
               この時間帯を適用
             </button>
@@ -1474,15 +1180,12 @@ export default function Home() {
 
             <button
               className={
-                displayMode ===
-                "boarding"
+                displayMode === "boarding"
                   ? "mode-button active"
                   : "mode-button"
               }
               onClick={() =>
-                setDisplayMode(
-                  "boarding"
-                )
+                setDisplayMode("boarding")
               }
             >
               乗車
@@ -1490,15 +1193,12 @@ export default function Home() {
 
             <button
               className={
-                displayMode ===
-                "alighting"
+                displayMode === "alighting"
                   ? "mode-button active"
                   : "mode-button"
               }
               onClick={() =>
-                setDisplayMode(
-                  "alighting"
-                )
+                setDisplayMode("alighting")
               }
             >
               降車
@@ -1516,8 +1216,7 @@ export default function Home() {
 
               <div className="display-mode">
 
-                {displayMode ===
-                "boarding"
+                {displayMode === "boarding"
                   ? "乗車地点"
                   : "降車地点"}
 
@@ -1525,8 +1224,7 @@ export default function Home() {
 
               <div className="selected-date-text">
 
-                {periodMode ===
-                "day"
+                {periodMode === "day"
                   ? selectedDate
                   : selectedMonth}
 
@@ -1536,9 +1234,7 @@ export default function Home() {
 
                 ルート：
 
-                {
-                  selectedRouteLabel
-                }
+                {selectedRouteLabel}
 
               </div>
 
@@ -1548,15 +1244,11 @@ export default function Home() {
 
                   時間：
 
-                  {
-                    appliedStartTime
-                  }
+                  {appliedStartTime}
 
                   {" ～ "}
 
-                  {
-                    appliedEndTime
-                  }
+                  {appliedEndTime}
 
                 </div>
 
@@ -1568,9 +1260,7 @@ export default function Home() {
 
                   施設：
 
-                  {
-                    selectedFacilityData.name
-                  }
+                  {selectedFacilityData.name}
 
                 </div>
 
@@ -1580,9 +1270,7 @@ export default function Home() {
 
             <div className="record-count">
 
-              {
-                filteredRecords.length
-              }
+              {filteredRecords.length}
 
               件
 
