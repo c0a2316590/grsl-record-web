@@ -356,14 +356,14 @@ function createMonthlyPassengerIcon(
 
   /* 1～10人 */
 
-  if (totalPassenger <= 5) {
+  if (totalPassenger <= 3) {
     size = 36;
     color = "#4CAF50";
   }
 
   /* 11～30人 */
 
-  else if (totalPassenger <= 10) {
+  else if (totalPassenger <= 7) {
     size = 48;
     color = "#FF9800";
   }
